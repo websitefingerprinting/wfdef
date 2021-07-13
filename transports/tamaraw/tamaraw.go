@@ -77,6 +77,7 @@ const (
 
 	gRPCAddr           = "localhost:10086"
 	traceLogEnabled    = false
+	logEnabled         = true
 )
 
 type tamarawClientArgs struct {
@@ -616,7 +617,7 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 				if !conn.isServer && traceLogEnabled && conn.logger.logOn.Load().(bool) {
 					conn.loggerChan <- []int64{time.Now().UnixNano(), int64(len(data)), int64(padLen)}
 				}
-				if !conn.isServer{
+				if !conn.isServer && logEnabled{
 					log.Infof("[TRACE_LOG] %d %d %d", time.Now().UnixNano(), int64(len(data)), int64(padLen))
 				}
 				//log.Debugf("[Send] %-8s, %-3d+ %-3d bytes at %v", pktTypeMap[pktType], len(data), padLen, time.Now().Format("15:04:05.000"))

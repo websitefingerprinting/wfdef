@@ -86,6 +86,7 @@ const (
 
 	gRPCAddr           = "localhost:10086"
 	traceLogEnabled    = false
+	logEnabled         = true
 )
 
 type frontClientArgs struct {
@@ -565,7 +566,7 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 	sendChan := make(chan PacketInfo, 65535) // all packed packets are sent through this channel
 
 	var realNSeg uint32 = 0  // real packet counter over 1 second
-	var receiveBuf bytes.Buffer //read payload from upstream and buffer here
+	var receiveBuf utils.SafeBuffer //read payload from upstream and buffer here
 	var frontInitTime atomic.Value
 	var tsQueue *queue.FixedFIFO // maintain a queue of timestamps sampled
 	var maxPaddingN int
@@ -635,6 +636,7 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 				err = conn.makePacket(&frameBuf, pktType, data, padLen)
 				if err != nil {
 					errChan <- err
+					log.Infof("[Routine] Send routine exits by make pkt err.")
 					return
 				}
 				_, wtErr := conn.Conn.Write(frameBuf.Bytes())
@@ -646,7 +648,7 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 				if !conn.isServer && traceLogEnabled && conn.logger.logOn.Load().(bool) {
 					conn.loggerChan <- []int64{time.Now().UnixNano(), int64(len(data)), int64(padLen)}
 				}
-				if !conn.isServer{
+				if !conn.isServer && logEnabled {
 					log.Infof("[TRACE_LOG] %d %d %d", time.Now().UnixNano(), int64(len(data)), int64(padLen))
 				}
 				log.Debugf("[Send] %-8s, %-3d+ %-3d bytes at %v", pktTypeMap[pktType], len(data), padLen, time.Now().Format("15:04:05.000"))
@@ -698,7 +700,7 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 					time.Sleep(20 * time.Millisecond)
 					continue
 				}
-				ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				timestamp, qErr := tsQueue.DequeueOrWaitForNextElementContext(ctx)
 				if qErr == context.DeadlineExceeded {
 					log.Infof("[Routine] Dequeue timeout after 5 seconds.")
@@ -709,6 +711,7 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 					errChan <- qErr
 					return
 				}
+				cancel()
 				utils.SleepRho(frontInitTime.Load().(time.Time) ,timestamp.(time.Duration))
 				sendChan <- PacketInfo{pktType: packetTypeDummy, data: []byte{},  padLen: maxPacketPaddingLength}
 			}
@@ -773,7 +776,7 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 					atomic.StoreUint32(&conn.state, stateReady)
 				}
 			}
-			for receiveBuf.Len() > 0 {
+			for receiveBuf.GetLen() > 0 {
 				var payload [maxPacketPayloadLength]byte
 				rdLen, rdErr := receiveBuf.Read(payload[:])
 				written += int64(rdLen)

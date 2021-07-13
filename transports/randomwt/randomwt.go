@@ -81,6 +81,7 @@ const (
 
 	gRPCAddr           = "localhost:10086"
 	traceLogEnabled    = false
+	logEnabled         = true
 )
 
 type randomwtClientArgs struct {
@@ -613,7 +614,7 @@ func (conn *randomwtConn) ReadFrom(r io.Reader) (written int64, err error) {
 						conn.loggerChan <- []int64{time.Now().UnixNano(), int64(len(data)), int64(padLen)}
 					}
 				}
-				if !conn.isServer && pktType != packetTypeFakeFinish && pktType != packetTypeRealFinish {
+				if !conn.isServer && pktType != packetTypeFakeFinish && pktType != packetTypeRealFinish && logEnabled{
 					log.Infof("[TRACE_LOG] %d %d %d", time.Now().UnixNano(), int64(len(data)), int64(padLen))
 				}
 				log.Debugf("[Send] %-10s, %-3d+%-3d bytes at %v", pktTypeMap[pktType], len(data), padLen, time.Now().Format("15:04:05.000"))
