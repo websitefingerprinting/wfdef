@@ -1,2 +1,4 @@
 .idea
 obfs4proxy/obfs4proxy
+transports/wfgan/grpc/py/*.log
+transports/wfgan/grpc/py/__pycache__
