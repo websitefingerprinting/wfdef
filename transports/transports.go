@@ -35,6 +35,7 @@ import (
 	"github.com/websitefingerprinting/wfdef.git/transports/front"
 	"github.com/websitefingerprinting/wfdef.git/transports/null"
 	"github.com/websitefingerprinting/wfdef.git/transports/randomwt"
+	"github.com/websitefingerprinting/wfdef.git/transports/regulator"
 	"github.com/websitefingerprinting/wfdef.git/transports/tamaraw"
 	"github.com/websitefingerprinting/wfdef.git/transports/wfgan"
 	"sync"
@@ -100,6 +101,7 @@ func Init() error {
 		new(tamaraw.Transport),
 		new(front.Transport),
 		new(randomwt.Transport),
+		new(regulator.Transport),
 		new(null.Transport),
 		new(defconn.Transport),
 	} {

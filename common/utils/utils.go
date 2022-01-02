@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-func SleepRho(lastSend time.Time, rho time.Duration)  {
+func SleepRho(lastSend time.Time, rho time.Duration) {
 	deltaT := time.Now().Sub(lastSend)
 	if remainingDelay := rho - deltaT; remainingDelay > 0 {
 		// We got data faster than the pacing rate, sleep
@@ -26,7 +26,6 @@ func SleepRho(lastSend time.Time, rho time.Duration)  {
 		time.Sleep(remainingDelay)
 	}
 }
-
 
 func ParseArgByKey(args *pt.Args, key string, kind string) (interface{}, error) {
 	kind = strings.ToLower(kind)
@@ -41,7 +40,7 @@ func ParseArgByKey(args *pt.Args, key string, kind string) (interface{}, error) 
 		}
 		return arg, nil
 	} else if kind == "float32" || kind == "float64" {
-		precision, err := strconv.Atoi(kind[5:5+2])
+		precision, err := strconv.Atoi(kind[5 : 5+2])
 		if err != nil {
 			return nil, err
 		}
@@ -54,8 +53,7 @@ func ParseArgByKey(args *pt.Args, key string, kind string) (interface{}, error) 
 	return nil, fmt.Errorf("wrong kind: '%s'", kind)
 }
 
-
-func ReadFloatFromFile(fdir string) []float64{
+func ReadFloatFromFile(fdir string) []float64 {
 	file, err := os.Open(fdir)
 	if err != nil {
 		log.Errorf("[ERR] Fail to open file: %v", err)
@@ -68,22 +66,21 @@ func ReadFloatFromFile(fdir string) []float64{
 		lineStr := scanner.Text()
 		num, sErr := strconv.ParseFloat(lineStr, 64)
 		if sErr == nil {
-			arr = append(arr,num)
+			arr = append(arr, num)
 		}
 	}
 	log.Debugf("Successfully loading %v ipt info in %v", len(arr), time.Since(startTime))
 	return arr
 }
 
-
-func SampleIPT(arr []float64) float64{
+func SampleIPT(arr []float64) float64 {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	std := arr[0]
-	l := len(arr) -1
+	l := len(arr) - 1
 	ind := r.Intn(l) + 1
 	res := arr[ind] + r.NormFloat64()*std
 	res = math.Pow(10, res)
-	res *= 1000  // seconds to milliseconds
+	res *= 1000 // seconds to milliseconds
 	if res < 0 {
 		//negative ipt
 		res = 0
@@ -91,7 +88,7 @@ func SampleIPT(arr []float64) float64{
 	return res
 }
 
-func EstimateTCPCapacity(conn net.Conn) (capacity int, err error){
+func EstimateTCPCapacity(conn net.Conn) (capacity int, err error) {
 	tc, err := tcp.NewConn(conn)
 	if err != nil {
 		return 0, err
@@ -100,7 +97,7 @@ func EstimateTCPCapacity(conn net.Conn) (capacity int, err error){
 	var o tcpinfo.Info
 	var b [256]byte
 	i, err := tc.Option(o.Level(), o.Name(), b[:])
-	if j, ok := i.(*tcpinfo.Info); ok{
+	if j, ok := i.(*tcpinfo.Info); ok {
 		snd_cwnd := int(j.CongestionControl.SenderWindowSegs)
 		//unacked := int(j.Sys.UnackedSegs)
 		unacked := 0 //macos no such info
@@ -109,12 +106,10 @@ func EstimateTCPCapacity(conn net.Conn) (capacity int, err error){
 		return capacity, nil
 	}
 
-
 	return 0, err
 }
 
-
-func GetIntArgFromStr(argName string, args *pt.Args) (interface {}, error) {
+func GetIntArgFromStr(argName string, args *pt.Args) (interface{}, error) {
 	argStr, argOK := args.Get(argName)
 	if !argOK {
 		return nil, fmt.Errorf("missing argument '%s'", argName)
@@ -126,7 +121,7 @@ func GetIntArgFromStr(argName string, args *pt.Args) (interface {}, error) {
 	return argValue, nil
 }
 
-func GetFloatArgFromStr(argName string, args *pt.Args) (interface {}, error) {
+func GetFloatArgFromStr(argName string, args *pt.Args) (interface{}, error) {
 	argStr, argOK := args.Get(argName)
 	if !argOK {
 		return nil, fmt.Errorf("missing argument '%s'", argName)
@@ -138,5 +133,6 @@ func GetFloatArgFromStr(argName string, args *pt.Args) (interface {}, error) {
 	return argValue, nil
 }
 
-
-
+func GetFormattedCurrentTime() string {
+	return time.Now().Format("15:04:05.000000")
+}
