@@ -76,7 +76,6 @@ func (conn *regulatorConn) MakePacket(w io.Writer, pktType uint8, rate uint32, d
 
 	var rateBytes [regulatorOverhead]byte
 	binary.BigEndian.PutUint32(rateBytes[:], rate)
-	log.Debugf("[DEBUG] The rate bytes are %v, rate is %v", binary.BigEndian.Uint32(rateBytes[:]), rate)
 	copy(pkt[3+len(data):], rateBytes[:])
 	copy(pkt[3+len(data)+regulatorOverhead:], zeroPadBytes[:padLen])
 
@@ -134,7 +133,7 @@ func (conn *regulatorConn) readPackets() (err error) {
 		if decLen > defconn.PacketOverhead+defconn.MaxPacketPayloadLength {
 			rate = int32(binary.BigEndian.Uint32(pkt[3+payloadLen:]))
 		}
-		log.Debugf("[DEBUG] Rcv Packet: decLen: %v, pktType %v rate %v payloadLen %v", decLen, pktType, rate, payloadLen)
+		//log.Debugf("[DEBUG] Rcv Packet: decLen: %v, pktType %v rate %v payloadLen %v", decLen, pktType, rate, payloadLen)
 
 		if !conn.IsServer && pktType != defconn.PacketTypePrngSeed && defconn.LogEnabled {
 			log.Infof("[TRACE_LOG] %d %d %d", time.Now().UnixNano(), -int64(payloadLen), -int64(defconn.MaxPacketPayloadLength-payloadLen))
@@ -176,7 +175,7 @@ func (conn *regulatorConn) readPackets() (err error) {
 			if !conn.IsServer {
 				panic(fmt.Sprintf("Client receive SignalStop pkt from server? "))
 			}
-			conn.paddingChan <- true // Stop the defense
+			conn.paddingChan <- false // Stop the defense
 
 		case defconn.PacketTypeDummy:
 			if !conn.IsServer && atomic.LoadInt32(&conn.r) != rate {

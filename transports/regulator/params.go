@@ -1,6 +1,7 @@
 package regulator
 
 import (
+	"github.com/websitefingerprinting/wfdef.git/common/log"
 	"github.com/websitefingerprinting/wfdef.git/common/utils"
 	"math"
 	"sync"
@@ -27,7 +28,9 @@ func (sp *serverParams) GetLastSend() time.Time {
 }
 
 func (sp *serverParams) CalTargetRate(currentTime time.Time, r int32, d float32) (newRate int32) {
-	timeElapsed := currentTime.Sub(sp.GetLastSend())
+	lastSend := sp.GetLastSend()
+	timeElapsed := currentTime.Sub(lastSend)
+	log.Debugf("[DEBUG] Current time %v, last time %v, elapsed time: %v", currentTime.Format("15:04:05.000000"), lastSend.Format("15:04:05.000000"), timeElapsed)
 	if timeElapsed > 0 {
 		newRate = int32(float64(r) * math.Pow(float64(d), timeElapsed.Seconds()))
 		if newRate < 1 {
@@ -54,6 +57,12 @@ func (sp *serverParams) SetPaddingBudget(n int32) {
 	sp.mutex.Lock()
 	defer sp.mutex.Unlock()
 	sp.paddingBudget = int32(utils.Uniform(0, int(n)))
+}
+
+func (sp *serverParams) GetPaddingBudget() int32 {
+	sp.mutex.RLock()
+	defer sp.mutex.RUnlock()
+	return sp.paddingBudget
 }
 
 func (sp *serverParams) ConsumePaddingBudget() bool {

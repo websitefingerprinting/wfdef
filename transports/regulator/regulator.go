@@ -299,6 +299,7 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 					// initialize the parameters:
 					// 1) padding budget 2) record current timestamp 3) reset sending rate
 					sp.Init(conn.r, conn.n)
+					log.Debugf("[DEBUG] Current padding budget: %v", sp.GetPaddingBudget())
 					log.Debugf("[State] Client signal: %s -> %s.", defconn.StateMap[conn.ConnState.LoadCurState()], defconn.StateMap[defconn.StateStart])
 					conn.ConnState.SetState(defconn.StateStart)
 				} else {
@@ -320,19 +321,18 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 			return written, conErr
 		default:
 			if conn.ConnState.LoadCurState() == defconn.StateStart {
-				log.Debugf("[DEBUG] Server Enter start loop")
 				// defense on
 				// compute new sending rate 1) if hit threshold, reset rate 2) else compute the decayed rate
+				curTime := time.Now()
+				curRate := sp.CalTargetRate(curTime, conn.r, conn.d)
+				log.Infof("[Event] The rate is adjusted to %v at %v", curRate, curTime.Format("15:04:05.000000"))
+
 				threshold := int(conn.t * float32(sp.GetTargetRate()))
-				log.Debugf("The current threshold is %v", threshold)
-				bufLen := receiveBuf.GetLen()
+				bufLen := receiveBuf.GetLen() / defconn.MaxPacketPayloadLength
+				log.Debugf("[DEBUG] BufLen %v, threshold %v", bufLen, threshold)
 				if bufLen > threshold {
 					sp.SetTargetRate(conn.r)
 					log.Infof("[Event] The rate is reset to %v at %v", conn.r, utils.GetFormattedCurrentTime())
-				} else {
-					curTime := time.Now()
-					curRate := sp.CalTargetRate(curTime, conn.r, conn.d)
-					log.Infof("[Event] The rate is adjusted to %v at %v", curRate, curTime)
 				}
 
 				if bufLen > 0 {
@@ -349,15 +349,17 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 				} else {
 					//send dummy packets
 					if sp.ConsumePaddingBudget() {
+						log.Debugf("[DEBUG] The current padding budget is %v", sp.GetPaddingBudget())
 						conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, rate: uint32(sp.GetTargetRate()),
 							data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
+					} else {
+						log.Debugf("[DEBUG] The current padding budget is %v", sp.GetPaddingBudget())
 					}
 				}
 				rho := time.Duration(int64(1.0 / float64(sp.GetTargetRate()) * 1e9))
 				log.Debugf("[Event] Should sleep %v", rho)
 				utils.SleepRho(lastSend, rho)
 			} else {
-				log.Debugf("[DEBUG] Enter stop state")
 				//defense off (in stop or ready)
 				if receiveBuf.GetLen() > 0 {
 					// should be if instead of 'for' because the state may be changed in the middle of the time
