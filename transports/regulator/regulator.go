@@ -324,59 +324,42 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 				// defense on
 				// compute new sending rate 1) if hit threshold, reset rate 2) else compute the decayed rate
 				curTime := time.Now()
-				curRate := sp.CalTargetRate(curTime, conn.r, conn.d)
-				log.Infof("[Event] The rate is adjusted to %v at %v", curRate, curTime.Format("15:04:05.000000"))
+				curRate, isChanged := sp.CalTargetRate(curTime, conn.r, conn.d)
+				if isChanged {
+					log.Infof("[Event] The rate is adjusted to %v at %v", curRate, curTime.Format("15:04:05.000000"))
+				}
 
 				threshold := int(conn.t * float32(sp.GetTargetRate()))
 				bufLen := receiveBuf.GetLen() / defconn.MaxPacketPayloadLength
-				log.Debugf("[DEBUG] BufLen %v, threshold %v", bufLen, threshold)
+				//log.Debugf("[DEBUG] BufLen %v, threshold %v", bufLen, threshold)
 				if bufLen > threshold {
 					sp.SetTargetRate(conn.r)
-					log.Infof("[Event] The rate is reset to %v at %v", conn.r, utils.GetFormattedCurrentTime())
-				}
-
-				if bufLen > 0 {
-					// send real packets
-					var payload [defconn.MaxPacketPayloadLength]byte
-					rdLen, rdErr := receiveBuf.Read(payload[:])
-					written += int64(rdLen)
-					if rdErr != nil {
-						log.Infof("Exit by read buffer err:%v", rdErr)
-						return written, rdErr
-					}
-					conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, rate: uint32(sp.GetTargetRate()),
-						data: payload[:rdLen], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
-				} else {
-					//send dummy packets
-					if sp.ConsumePaddingBudget() {
-						log.Debugf("[DEBUG] The current padding budget is %v", sp.GetPaddingBudget())
-						conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, rate: uint32(sp.GetTargetRate()),
-							data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
-					} else {
-						log.Debugf("[DEBUG] The current padding budget is %v", sp.GetPaddingBudget())
-					}
-				}
-				rho := time.Duration(int64(1.0 / float64(sp.GetTargetRate()) * 1e9))
-				log.Debugf("[Event] Should sleep %v", rho)
-				utils.SleepRho(lastSend, rho)
-			} else {
-				//defense off (in stop or ready)
-				if receiveBuf.GetLen() > 0 {
-					// should be if instead of 'for' because the state may be changed in the middle of the time
-					var payload [defconn.MaxPacketPayloadLength]byte
-					rdLen, rdErr := receiveBuf.Read(payload[:])
-					written += int64(rdLen)
-					if rdErr != nil {
-						log.Infof("Exit by read buffer err:%v", rdErr)
-						return written, rdErr
-					}
-					conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, rate: uint32(sp.GetTargetRate()),
-						data: payload[:rdLen], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
-				} else {
-					// to avoid infinite loop
-					time.Sleep(20 * time.Millisecond)
+					log.Infof("[Event] BufLen %v > threshold %v, the rate is reset to %v at %v",
+						bufLen, threshold, conn.r, utils.GetFormattedCurrentTime())
 				}
 			}
+
+			if receiveBuf.GetLen() > 0 {
+				// send real packets
+				var payload [defconn.MaxPacketPayloadLength]byte
+				rdLen, rdErr := receiveBuf.Read(payload[:])
+				written += int64(rdLen)
+				if rdErr != nil {
+					log.Infof("Exit by read buffer err:%v", rdErr)
+					return written, rdErr
+				}
+				conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, rate: uint32(sp.GetTargetRate()),
+					data: payload[:rdLen], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
+			} else if conn.ConnState.LoadCurState() == defconn.StateStart && sp.ConsumePaddingBudget() {
+				//if there is no data in the buffer:
+				//if defense on && has padding budget -> send dummy packet
+				//else: skip (defense off or no padding budget)
+				log.Debugf("[DEBUG] The current padding budget is %v", sp.GetPaddingBudget())
+				conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, rate: uint32(sp.GetTargetRate()),
+					data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
+			}
+			rho := time.Duration(int64(1.0 / float64(sp.GetTargetRate()) * 1e9))
+			utils.SleepRho(lastSend, rho)
 			lastSend = time.Now()
 		}
 	}
@@ -410,7 +393,6 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 				log.Debugf("[State] Real Sent: %v, Real Receive: %v, curState: %s at %v.",
 					conn.NRealSegSentLoad(), conn.NRealSegRcvLoad(), defconn.StateMap[conn.ConnState.LoadCurState()], utils.GetFormattedCurrentTime())
 				if conn.ConnState.LoadCurState() != defconn.StateStop && (conn.NRealSegSentLoad() < 2 || conn.NRealSegRcvLoad() < 2) {
-					// TODO: Check RealRcvLoad
 					log.Infof("[State] %s -> %s.", defconn.StateMap[conn.ConnState.LoadCurState()], defconn.StateMap[defconn.StateStop])
 					conn.ConnState.SetState(defconn.StateStop)
 					conn.sendChan <- packetInfo{pktType: defconn.PacketTypeSignalStop, rate: 1,
@@ -476,47 +458,29 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 			log.Infof("downstream copy loop terminated at %v. Reason: %v", utils.GetFormattedCurrentTime(), conErr)
 			return written, conErr
 		default:
-			if conn.ConnState.LoadCurState() == defconn.StateStart {
-				//defense on
-				curClientRate := float32(atomic.LoadInt32(&conn.r)) / conn.u
-				rho := time.Duration(int64(1.0 / curClientRate * 1e9))
-				log.Debugf("[DEBUG] Current client rate: %.0f (%v) at %v", curClientRate, rho, utils.GetFormattedCurrentTime())
-				utils.SleepRho(lastSend, rho)
+			//defense on
+			curClientRate := float32(atomic.LoadInt32(&conn.r)) / conn.u
+			rho := time.Duration(int64(1.0 / curClientRate * 1e9))
+			//log.Debugf("[DEBUG] Current client rate: %.0f (%v) at %v", curClientRate, rho, utils.GetFormattedCurrentTime())
 
-				if receiveBuf.GetLen() > 0 {
-					var payload [defconn.MaxPacketPayloadLength]byte
+			if receiveBuf.GetLen() > 0 {
+				var payload [defconn.MaxPacketPayloadLength]byte
 
-					rdLen, rdErr := receiveBuf.Read(payload[:])
-					written += int64(rdLen)
-					if rdErr != nil {
-						log.Infof("Exit by read buffer err:%v", rdErr)
-						return written, rdErr
-					}
-					conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, rate: 1,
-						data: payload[:rdLen], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
-					conn.NRealSegSentIncrement()
-				} else {
-					conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, rate: 1,
-						data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
+				rdLen, rdErr := receiveBuf.Read(payload[:])
+				written += int64(rdLen)
+				if rdErr != nil {
+					log.Infof("Exit by read buffer err:%v", rdErr)
+					return written, rdErr
 				}
-			} else {
-				//defense off (in stop or ready)
-				if receiveBuf.GetLen() > 0 {
-					// should be if instead of 'for' because the state may be changed in the middle of the time
-					var payload [defconn.MaxPacketPayloadLength]byte
-					rdLen, rdErr := receiveBuf.Read(payload[:])
-					written += int64(rdLen)
-					if rdErr != nil {
-						log.Infof("Exit by read buffer err:%v", rdErr)
-						return written, rdErr
-					}
-					conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, rate: 1,
-						data: payload[:rdLen], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
-				} else {
-					// to avoid infinite loop
-					time.Sleep(20 * time.Millisecond)
-				}
+				conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, rate: 1,
+					data: payload[:rdLen], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
+				conn.NRealSegSentIncrement()
+			} else if conn.ConnState.LoadCurState() == defconn.StateStart {
+				conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, rate: 1,
+					data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
 			}
+
+			utils.SleepRho(lastSend, rho)
 			lastSend = time.Now()
 		}
 	}

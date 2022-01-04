@@ -150,7 +150,8 @@ func (conn *regulatorConn) readPackets() (err error) {
 					conn.NRealSegRcvIncrement()
 					if atomic.LoadInt32(&conn.r) != rate {
 						atomic.StoreInt32(&conn.r, rate)
-						log.Debugf("[Event] Client Receives new server rate: %v", rate)
+						log.Debugf("[Event] Client Receives new server rate: %v, Client rate is adjusted to %v",
+							rate, float32(atomic.LoadInt32(&conn.r))/conn.u)
 					}
 				}
 			}
