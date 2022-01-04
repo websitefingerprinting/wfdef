@@ -133,6 +133,6 @@ func GetFloatArgFromStr(argName string, args *pt.Args) (interface{}, error) {
 	return argValue, nil
 }
 
-func GetFormattedCurrentTime() string {
-	return time.Now().Format("15:04:05.000000")
+func GetFormattedCurrentTime(t time.Time) string {
+	return t.Format("15:04:05.000000")
 }

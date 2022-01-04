@@ -32,6 +32,7 @@ package regulator // import "github.com/websitefingerprinting/wfdef.git/transpor
 import (
 	"bytes"
 	"git.torproject.org/pluggable-transports/goptlib.git"
+	queue "github.com/enriquebris/goconcurrentqueue"
 	"github.com/websitefingerprinting/wfdef.git/common/log"
 	"github.com/websitefingerprinting/wfdef.git/common/utils"
 	"github.com/websitefingerprinting/wfdef.git/transports/base"
@@ -241,7 +242,7 @@ func (conn *regulatorConn) Send() {
 }
 
 func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error) {
-	log.Debugf("[State] Regulator Server Enter copyloop state: %v at %v", defconn.StateMap[conn.ConnState.LoadCurState()], time.Now().Format("15:04:05.000"))
+	log.Debugf("[State] Regulator Server Enter copyloop state: %v at %v", defconn.StateMap[conn.ConnState.LoadCurState()], utils.GetFormattedCurrentTime(time.Now()))
 	defer close(conn.CloseChan)
 
 	var receiveBuf utils.SafeBuffer
@@ -317,7 +318,7 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 	for {
 		select {
 		case conErr := <-conn.ErrChan:
-			log.Infof("downstream copy loop terminated at %v. Reason: %v", utils.GetFormattedCurrentTime(), conErr)
+			log.Infof("downstream copy loop terminated at %v. Reason: %v", utils.GetFormattedCurrentTime(time.Now()), conErr)
 			return written, conErr
 		default:
 			if conn.ConnState.LoadCurState() == defconn.StateStart {
@@ -335,7 +336,7 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 				if bufLen > threshold {
 					sp.SetTargetRate(conn.r)
 					log.Infof("[Event] BufLen %v > threshold %v, the rate is reset to %v at %v",
-						bufLen, threshold, conn.r, utils.GetFormattedCurrentTime())
+						bufLen, threshold, conn.r, utils.GetFormattedCurrentTime(time.Now()))
 				}
 			}
 
@@ -366,11 +367,18 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 
 }
 
+type UpstreamDataInfo struct {
+	Data      []byte
+	Timestamp time.Time
+}
+
 func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error) {
-	log.Debugf("[State] Regulator Client Enter copyloop state: %v at %v", defconn.StateMap[conn.ConnState.LoadCurState()], time.Now().Format("15:04:05.000"))
+	log.Debugf("[State] Regulator Client Enter copyloop state: %v at %v", defconn.StateMap[conn.ConnState.LoadCurState()], utils.GetFormattedCurrentTime(time.Now()))
 	defer close(conn.CloseChan)
 
-	var receiveBuf utils.SafeBuffer
+	//var receiveBuf utils.SafeBuffer
+	var receiveQ *queue.FIFO // maintain a queue of data as well as the arrival times
+	receiveQ = queue.NewFIFO()
 
 	var lastSend time.Time
 
@@ -391,7 +399,7 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 				}
 			case <-ticker.C:
 				log.Debugf("[State] Real Sent: %v, Real Receive: %v, curState: %s at %v.",
-					conn.NRealSegSentLoad(), conn.NRealSegRcvLoad(), defconn.StateMap[conn.ConnState.LoadCurState()], utils.GetFormattedCurrentTime())
+					conn.NRealSegSentLoad(), conn.NRealSegRcvLoad(), defconn.StateMap[conn.ConnState.LoadCurState()], utils.GetFormattedCurrentTime(time.Now()))
 				if conn.ConnState.LoadCurState() != defconn.StateStop && (conn.NRealSegSentLoad() < 2 || conn.NRealSegRcvLoad() < 2) {
 					log.Infof("[State] %s -> %s.", defconn.StateMap[conn.ConnState.LoadCurState()], defconn.StateMap[defconn.StateStop])
 					conn.ConnState.SetState(defconn.StateStop)
@@ -421,11 +429,23 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 					return
 				}
 				if rdLen > 0 {
-					_, werr := receiveBuf.Write(buf[:rdLen])
-					if werr != nil {
-						conn.ErrChan <- werr
-						return
+					//_, werr := receiveBuf.Write(buf[:rdLen])
+					log.Debugf("[Event] Receive %v bytes data at %v from upstream",
+						rdLen, utils.GetFormattedCurrentTime(time.Now()))
+					index := 0
+					for index < rdLen {
+						dataInfo := UpstreamDataInfo{
+							Data:      buf[index:utils.IntMin(index+defconn.MaxPacketPayloadLength, rdLen)],
+							Timestamp: time.Now(),
+						}
+						index += defconn.MaxPacketPayloadLength
+						werr := receiveQ.Enqueue(dataInfo)
+						if werr != nil {
+							conn.ErrChan <- werr
+							return
+						}
 					}
+
 					// signal server to start if there is more than one cell coming
 					// else switch to padding state
 					// stop -> ready -> start
@@ -455,7 +475,7 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 	for {
 		select {
 		case conErr := <-conn.ErrChan:
-			log.Infof("downstream copy loop terminated at %v. Reason: %v", utils.GetFormattedCurrentTime(), conErr)
+			log.Infof("downstream copy loop terminated at %v. Reason: %v", utils.GetFormattedCurrentTime(time.Now()), conErr)
 			return written, conErr
 		default:
 			//defense on
@@ -463,23 +483,44 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 			rho := time.Duration(int64(1.0 / curClientRate * 1e9))
 			//log.Debugf("[DEBUG] Current client rate: %.0f (%v) at %v", curClientRate, rho, utils.GetFormattedCurrentTime())
 
-			if receiveBuf.GetLen() > 0 {
-				var payload [defconn.MaxPacketPayloadLength]byte
+			if receiveQ.GetLen() > 0 {
 
-				rdLen, rdErr := receiveBuf.Read(payload[:])
-				written += int64(rdLen)
-				if rdErr != nil {
-					log.Infof("Exit by read buffer err:%v", rdErr)
-					return written, rdErr
+				tmpDataInfo, dErr := receiveQ.Dequeue()
+				if dErr != nil {
+					log.Infof("Exit by read buffer err:%v", dErr)
+					return written, dErr
 				}
+
+				payload := tmpDataInfo.(UpstreamDataInfo).Data
+				rdLen := len(payload)
+				written += int64(rdLen)
+
 				conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, rate: 1,
-					data: payload[:rdLen], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
+					data: payload[:], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
 				conn.NRealSegSentIncrement()
 			} else if conn.ConnState.LoadCurState() == defconn.StateStart {
 				conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, rate: 1,
 					data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
 			}
 
+			// check the next packet's timestamp to decide whether or not sleep
+			// if  it is delayed for more than conn.C seconds, then send immediately
+			if receiveQ.GetLen() > 0 {
+				nextData, gErr := receiveQ.Get(0)
+				if gErr != nil {
+					log.Errorf("[Event] Fail to get the element in the queue: %v", gErr)
+				} else {
+					nextDataTime := nextData.(UpstreamDataInfo).Timestamp
+					tmpTimeGap := time.Now().Add(rho).Sub(nextDataTime).Seconds()
+					log.Debugf("[DEBUG] %v + %v - %v, the tmpTimeGap: %v",
+						utils.GetFormattedCurrentTime(time.Now()), rho, utils.GetFormattedCurrentTime(nextDataTime), tmpTimeGap)
+					if tmpTimeGap > float64(conn.c) {
+						log.Infof("[Event] The next packet is delayed for %v > c:%v, send immediately",
+							tmpTimeGap, conn.c)
+						rho = time.Duration(0)
+					}
+				}
+			}
 			utils.SleepRho(lastSend, rho)
 			lastSend = time.Now()
 		}
