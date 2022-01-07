@@ -52,6 +52,8 @@ const (
 	nArg = "n"
 	uArg = "u"
 	cArg = "c"
+
+	LogEnabled = true
 )
 
 type regulatorClientArgs struct {
@@ -232,7 +234,7 @@ func (conn *regulatorConn) Send() {
 				return
 			}
 
-			if !conn.IsServer && defconn.LogEnabled {
+			if !conn.IsServer && LogEnabled {
 				log.Infof("[TRACE_LOG] %d %d %d", time.Now().UnixNano(), int64(len(data)), int64(padLen))
 			} else {
 				log.Debugf("[Send] %-8s, %-3d+ %-3d bytes at %v", defconn.PktTypeMap[pktType], len(data), padLen, time.Now().Format("15:04:05.000"))
@@ -334,9 +336,9 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 				bufLen := receiveBuf.GetLen() / defconn.MaxPacketPayloadLength
 				//log.Debugf("[DEBUG] BufLen %v, threshold %v", bufLen, threshold)
 				if bufLen > threshold {
-					sp.SetTargetRate(conn.r)
-					log.Infof("[Event] BufLen %v > threshold %v, the rate is reset to %v at %v",
-						bufLen, threshold, conn.r, utils.GetFormattedCurrentTime(time.Now()))
+					sp.SetLastSend()
+					log.Infof("[Event] BufLen %v > threshold %v, reset start time at %v",
+						bufLen, threshold, utils.GetFormattedCurrentTime(time.Now()))
 				}
 			}
 

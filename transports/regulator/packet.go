@@ -135,7 +135,7 @@ func (conn *regulatorConn) readPackets() (err error) {
 		}
 		//log.Debugf("[DEBUG] Rcv Packet: decLen: %v, pktType %v rate %v payloadLen %v", decLen, pktType, rate, payloadLen)
 
-		if !conn.IsServer && pktType != defconn.PacketTypePrngSeed && defconn.LogEnabled {
+		if !conn.IsServer && pktType != defconn.PacketTypePrngSeed && LogEnabled {
 			log.Infof("[TRACE_LOG] %d %d %d", time.Now().UnixNano(), -int64(payloadLen), -int64(defconn.MaxPacketPayloadLength-payloadLen))
 		} else {
 			log.Debugf("[Rcv]  %-8s, %-3d+ %-3d bytes at %v", defconn.PktTypeMap[pktType], -int64(payloadLen),
