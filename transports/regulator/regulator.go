@@ -162,7 +162,7 @@ func (cf *regulatorClientFactory) Dial(network, addr string, dialFn base.DialFun
 	argsT := args.(*regulatorClientArgs)
 	c := &regulatorConn{
 		defConn.(*defconn.DefConn),
-		argsT.r, argsT.d, argsT.t, argsT.n, argsT.u, argsT.c, sendChan, paddingChan,
+		argsT.r, argsT.d, argsT.t, argsT.n, argsT.u, argsT.c, 0, sendChan, paddingChan,
 	}
 	return c, nil
 }
@@ -187,19 +187,20 @@ func (sf *regulatorServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	sendChan := make(chan packetInfo, 10000)
 	c := &regulatorConn{
 		defConn.(*defconn.DefConn),
-		sf.r, sf.d, sf.t, sf.n, sf.u, sf.c, sendChan, paddingChan,
+		sf.r, sf.d, sf.t, sf.n, sf.u, sf.c, 0, sendChan, paddingChan,
 	}
 	return c, nil
 }
 
 type regulatorConn struct {
 	*defconn.DefConn
-	r int32
-	d float32
-	t float32
-	n int32
-	u float32
-	c float32
+	r  int32
+	d  float32
+	t  float32
+	n  int32
+	u  float32
+	c  float32
+	t0 int64 //the start timestamp (in Unix()) of a surge
 
 	sendChan    chan packetInfo
 	paddingChan chan bool // true when start defense, false when stop defense
@@ -217,11 +218,11 @@ func (conn *regulatorConn) Send() {
 			}
 		case packetInfo := <-conn.sendChan:
 			pktType := packetInfo.pktType
-			rate := packetInfo.rate
+			t0 := packetInfo.t0
 			data := packetInfo.data
 			padLen := packetInfo.padLen
 			var frameBuf bytes.Buffer
-			err := conn.MakePacket(&frameBuf, pktType, rate, data, padLen)
+			err := conn.MakePacket(&frameBuf, pktType, t0, data, padLen)
 			if err != nil {
 				conn.ErrChan <- err
 				log.Infof("[Routine] Send routine exits by make pkt err.")
@@ -351,14 +352,14 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 					log.Infof("Exit by read buffer err:%v", rdErr)
 					return written, rdErr
 				}
-				conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, rate: uint32(sp.GetTargetRate()),
+				conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, t0: sp.GetLastSend().UnixNano(),
 					data: payload[:rdLen], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
 			} else if conn.ConnState.LoadCurState() == defconn.StateStart && sp.ConsumePaddingBudget() {
 				//if there is no data in the buffer:
 				//if defense on && has padding budget -> send dummy packet
 				//else: skip (defense off or no padding budget)
 				log.Debugf("[DEBUG] The current padding budget is %v", sp.GetPaddingBudget())
-				conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, rate: uint32(sp.GetTargetRate()),
+				conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, t0: sp.GetLastSend().UnixNano(),
 					data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
 			}
 			rho := time.Duration(int64(1.0 / float64(sp.GetTargetRate()) * 1e9))
@@ -405,7 +406,7 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 				if conn.ConnState.LoadCurState() != defconn.StateStop && (conn.NRealSegSentLoad() < 2 || conn.NRealSegRcvLoad() < 2) {
 					log.Infof("[State] %s -> %s.", defconn.StateMap[conn.ConnState.LoadCurState()], defconn.StateMap[defconn.StateStop])
 					conn.ConnState.SetState(defconn.StateStop)
-					conn.sendChan <- packetInfo{pktType: defconn.PacketTypeSignalStop, rate: 1,
+					conn.sendChan <- packetInfo{pktType: defconn.PacketTypeSignalStop, t0: 0,
 						data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
 				}
 				conn.NRealSegReset()
@@ -457,7 +458,7 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 						// or stateReady with >0 cell -> stateStart
 						log.Infof("[State] Got %v bytes upstream, %s -> %s.", rdLen, defconn.StateMap[conn.ConnState.LoadCurState()], defconn.StateMap[defconn.StateStart])
 						conn.ConnState.SetState(defconn.StateStart)
-						conn.sendChan <- packetInfo{pktType: defconn.PacketTypeSignalStart, rate: 1,
+						conn.sendChan <- packetInfo{pktType: defconn.PacketTypeSignalStart, t0: 0,
 							data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
 					} else if conn.ConnState.LoadCurState() == defconn.StateStop {
 						log.Infof("[State] Got %v bytes upstream, %s -> %s.", rdLen, defconn.StateMap[defconn.StateStop], defconn.StateMap[defconn.StateReady])
@@ -474,16 +475,27 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 
 	// mainloop, when defense is on, client send packets with rate r/u
 	lastSend = time.Now()
+	lastRate := int32(float32(conn.r) / conn.u)
+	atomic.StoreInt64(&conn.t0, lastSend.UnixNano())
 	for {
 		select {
 		case conErr := <-conn.ErrChan:
 			log.Infof("downstream copy loop terminated at %v. Reason: %v", utils.GetFormattedCurrentTime(time.Now()), conErr)
 			return written, conErr
 		default:
-			//defense on
-			curClientRate := float32(atomic.LoadInt32(&conn.r)) / conn.u
-			rho := time.Duration(int64(1.0 / curClientRate * 1e9))
-			//log.Debugf("[DEBUG] Current client rate: %.0f (%v) at %v", curClientRate, rho, utils.GetFormattedCurrentTime())
+			// defense on
+			// compute new sending rate 1) if hit threshold, reset rate 2) else compute the decayed rate
+			curTime := time.Now()
+			serverRate := CalTargetRateWithLast(time.Unix(0, atomic.LoadInt64(&conn.t0)), curTime, conn.r, conn.d)
+			newRate := float32(serverRate) / conn.u
+			//log.Debugf("[DEBUG] t0 %v, curt %v, new rate %v", time.Unix(0, conn.t0), curTime, newRate)
+			if int32(newRate) != lastRate {
+				lastRate = int32(newRate)
+				log.Infof("[Event] The rate is adjusted to %v at %v", lastRate, curTime.Format("15:04:05.000000"))
+			}
+
+			rho := time.Duration(1.0 / newRate * 1e9)
+			log.Debugf("[DEBUG] Server rate: %v, Current client rate: %v (%v), t0: %v  at %v", serverRate, lastRate, rho, atomic.LoadInt64(&conn.t0), utils.GetFormattedCurrentTime(time.Now()))
 
 			if receiveQ.GetLen() > 0 {
 
@@ -497,11 +509,11 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 				rdLen := len(payload)
 				written += int64(rdLen)
 
-				conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, rate: 1,
+				conn.sendChan <- packetInfo{pktType: defconn.PacketTypePayload, t0: 0,
 					data: payload[:], padLen: uint16(defconn.MaxPacketPaddingLength - rdLen)}
 				conn.NRealSegSentIncrement()
 			} else if conn.ConnState.LoadCurState() == defconn.StateStart {
-				conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, rate: 1,
+				conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, t0: 0,
 					data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
 			}
 

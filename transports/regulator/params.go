@@ -28,18 +28,25 @@ func (sp *serverParams) GetLastSend() time.Time {
 
 func (sp *serverParams) CalTargetRate(currentTime time.Time, r int32, d float32) (newRate int32, isChanged bool) {
 	lastSend := sp.GetLastSend()
-	timeElapsed := currentTime.Sub(lastSend)
-	//log.Debugf("[DEBUG] Current time %v, last time %v, elapsed time: %v", currentTime.Format("15:04:05.000000"), lastSend.Format("15:04:05.000000"), timeElapsed)
-	if timeElapsed > 0 {
-		newRate = int32(float64(r) * math.Pow(float64(d), timeElapsed.Seconds()))
-		if newRate < 1 {
-			newRate = 1
-		}
-	}
+
+	newRate = CalTargetRateWithLast(lastSend, currentTime, r, d)
+
 	isChanged = false
 	if sp.GetTargetRate() != newRate {
 		sp.SetTargetRate(newRate)
 		isChanged = true
+	}
+	return
+}
+
+func CalTargetRateWithLast(lastTime time.Time, currentTime time.Time, r int32, d float32) (newRate int32) {
+	timeElapsed := currentTime.Sub(lastTime)
+	//log.Debugf("[DEBUG] Current time %v, last time %v, elapsed time: %v", currentTime.Format("15:04:05.000000"), lastSend.Format("15:04:05.000000"), timeElapsed)
+	if timeElapsed >= 0 {
+		newRate = int32(float64(r) * math.Pow(float64(d), timeElapsed.Seconds()))
+		if newRate < 1 {
+			newRate = 1
+		}
 	}
 	return
 }

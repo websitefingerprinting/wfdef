@@ -42,19 +42,19 @@ import (
 
 const (
 	// uint16_t rate
-	regulatorOverhead = 4
+	regulatorOverhead = 8
 )
 
 type packetInfo struct {
 	pktType uint8
 	data    []byte
 	padLen  uint16
-	rate    uint32
+	t0      int64
 }
 
 var zeroPadBytes [defconn.MaxPacketPaddingLength]byte
 
-func (conn *regulatorConn) MakePacket(w io.Writer, pktType uint8, rate uint32, data []byte, padLen uint16) error {
+func (conn *regulatorConn) MakePacket(w io.Writer, pktType uint8, t0 int64, data []byte, padLen uint16) error {
 	var pkt [framing.MaximumFramePayloadLength]byte
 
 	if len(data)+int(padLen) > defconn.MaxPacketPayloadLength+regulatorOverhead {
@@ -66,7 +66,7 @@ func (conn *regulatorConn) MakePacket(w io.Writer, pktType uint8, rate uint32, d
 	//   uint8_t  type         PacketTypePayload (0x00)
 	//   uint16_t length       Length of the payload (Big Endian).
 	//   uint8_t[]             Payload Data payload.
-	//   uint32_t rate         Server Sending Rate (Big Endian).
+	//   uint64 t0             Surge start time Unix (Big Endian).
 	//   uint8_t[]             padding Padding.
 	pkt[0] = pktType
 	binary.BigEndian.PutUint16(pkt[1:], uint16(len(data)))
@@ -75,7 +75,7 @@ func (conn *regulatorConn) MakePacket(w io.Writer, pktType uint8, rate uint32, d
 	}
 
 	var rateBytes [regulatorOverhead]byte
-	binary.BigEndian.PutUint32(rateBytes[:], rate)
+	binary.BigEndian.PutUint64(rateBytes[:], uint64(t0))
 	copy(pkt[3+len(data):], rateBytes[:])
 	copy(pkt[3+len(data)+regulatorOverhead:], zeroPadBytes[:padLen])
 
@@ -127,12 +127,7 @@ func (conn *regulatorConn) readPackets() (err error) {
 		}
 		payload := pkt[3 : 3+payloadLen]
 
-		// When doing handshake, since we use defconn.handshake, there is no 4-byte rate
-		// to decode both packet format correctly, judge here
-		rate := conn.r
-		if decLen > defconn.PacketOverhead+defconn.MaxPacketPayloadLength {
-			rate = int32(binary.BigEndian.Uint32(pkt[3+payloadLen:]))
-		}
+		t0 := int64(binary.BigEndian.Uint64(pkt[3+payloadLen:]))
 		//log.Debugf("[DEBUG] Rcv Packet: decLen: %v, pktType %v rate %v payloadLen %v", decLen, pktType, rate, payloadLen)
 
 		if !conn.IsServer && pktType != defconn.PacketTypePrngSeed && LogEnabled {
@@ -148,10 +143,9 @@ func (conn *regulatorConn) readPackets() (err error) {
 				conn.ReceiveDecodedBuffer.Write(payload)
 				if !conn.IsServer {
 					conn.NRealSegRcvIncrement()
-					if atomic.LoadInt32(&conn.r) != rate {
-						atomic.StoreInt32(&conn.r, rate)
-						log.Debugf("[Event] Client Receives new server rate: %v, Client rate is adjusted to %v",
-							rate, float32(atomic.LoadInt32(&conn.r))/conn.u)
+					if atomic.LoadInt64(&conn.t0) != t0 {
+						atomic.StoreInt64(&conn.t0, t0)
+						log.Debugf("[Event] Client Receives new t0: %v (%v)", time.Unix(0, t0), t0)
 					}
 				}
 			}
@@ -179,9 +173,9 @@ func (conn *regulatorConn) readPackets() (err error) {
 			conn.paddingChan <- false // Stop the defense
 
 		case defconn.PacketTypeDummy:
-			if !conn.IsServer && atomic.LoadInt32(&conn.r) != rate {
-				atomic.StoreInt32(&conn.r, rate)
-				log.Debugf("[Event] Client Receives new server rate: %v", rate)
+			if !conn.IsServer && atomic.LoadInt64(&conn.t0) != t0 {
+				atomic.StoreInt64(&conn.t0, t0)
+				log.Debugf("[Event] Client Receives new t0: %v", time.Unix(0, t0))
 			}
 		default:
 			// Ignore unknown packet types.
