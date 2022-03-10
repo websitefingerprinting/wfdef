@@ -18,12 +18,14 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 class GenerateTraceServer(GenerateTraceServicer):
-    def __init__(self, model, scaler, class_dim, is_bytes, cell_size):
+    def __init__(self, model, scaler, class_dim, is_bytes, cell_size, latent_dim, seq_len):
         self.model = model
         self.scaler = scaler
         self.class_dim = class_dim
         self.is_bytes = is_bytes
         self.cell_size = cell_size
+        self.latent_dim = latent_dim
+        self.seq_len = seq_len
 
     def Query(self, request, context):
         logging.info('Receive request {}'.format(request))
@@ -33,17 +35,17 @@ class GenerateTraceServer(GenerateTraceServicer):
 
     def sample(self):
         n = 1
-        c_ind = np.random.randint(class_dim)
+        c_ind = np.random.randint(self.class_dim)
         self.model.eval()
         with torch.no_grad():
-            z = np.random.randn(n, latent_dim).astype('float32')
+            z = np.random.randn(n, self.latent_dim).astype('float32')
             z = torch.from_numpy(z).to(device)
-            c = torch.zeros(n, class_dim)
+            c = torch.zeros(n, self.class_dim)
             c[:, c_ind] = 1
             c = c.to(device)
             synthesized_x = self.model(z, c).cpu().numpy()
             synthesized_x = self.scaler.inverse_transform(synthesized_x).flatten()
-            length = min(int(synthesized_x[0]), seq_len - 1)
+            length = min(int(synthesized_x[0]), self.seq_len - 1)
             if length % 2 != 0:
                 length -= 1
             assert length % 2 == 0
@@ -109,7 +111,7 @@ if __name__ == '__main__':
     # open up grpc service
     server = grpc.server(ThreadPoolExecutor())
     add_GenerateTraceServicer_to_server(GenerateTraceServer(model,
-        scaler, class_dim, is_bytes, cell_size), server)
+                                                            scaler, class_dim, is_bytes, cell_size, latent_dim, seq_len), server)
     server.add_insecure_port(f'[::]:{port}')
     server.start()
     logging.info('server ready on port %r', port)
