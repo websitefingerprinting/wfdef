@@ -173,7 +173,7 @@ func (conn *regulatorConn) readPackets() (err error) {
 			conn.paddingChan <- false // Stop the defense
 
 		case defconn.PacketTypeDummy:
-			if !conn.IsServer && atomic.LoadInt64(&conn.t0) != t0 {
+			if !conn.IsServer && atomic.LoadInt64(&conn.t0) < t0 {
 				atomic.StoreInt64(&conn.t0, t0)
 				log.Debugf("[Event] Client Receives new t0: %v", time.Unix(0, t0))
 			}

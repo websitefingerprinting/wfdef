@@ -384,6 +384,7 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 	receiveQ = queue.NewFIFO()
 
 	var lastSend time.Time
+	var rho time.Duration
 
 	//create a go routine to send out packets to the wire
 	go conn.Send()
@@ -483,19 +484,24 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 			log.Infof("downstream copy loop terminated at %v. Reason: %v", utils.GetFormattedCurrentTime(time.Now()), conErr)
 			return written, conErr
 		default:
-			// defense on
-			// compute new sending rate 1) if hit threshold, reset rate 2) else compute the decayed rate
-			curTime := time.Now()
-			serverRate := CalTargetRateWithLast(time.Unix(0, atomic.LoadInt64(&conn.t0)), curTime, conn.r, conn.d)
-			newRate := float32(serverRate) / conn.u
-			//log.Debugf("[DEBUG] t0 %v, curt %v, new rate %v", time.Unix(0, conn.t0), curTime, newRate)
-			if int32(newRate) != lastRate {
-				lastRate = int32(newRate)
-				log.Infof("[Event] The rate is adjusted to %v at %v", lastRate, curTime.Format("15:04:05.000000"))
-			}
+			if conn.ConnState.LoadCurState() == defconn.StateStart {
+				// defense on
+				// compute new sending rate 1) if hit threshold, reset rate 2) else compute the decayed rate
+				curTime := time.Now()
+				serverRate := CalTargetRateWithLast(time.Unix(0, atomic.LoadInt64(&conn.t0)), curTime, conn.r, conn.d)
+				newRate := float32(serverRate) / conn.u
+				//log.Debugf("[DEBUG] t0 %v, curt %v, new rate %v", time.Unix(0, conn.t0), curTime, newRate)
+				if int32(newRate) != lastRate {
+					lastRate = int32(newRate)
+					log.Infof("[Event] The rate is adjusted to %v at %v", lastRate, curTime.Format("15:04:05.000000"))
+				}
 
-			rho := time.Duration(1.0 / newRate * 1e9)
-			log.Debugf("[DEBUG] Server rate: %v, Current client rate: %v (%v), t0: %v  at %v", serverRate, lastRate, rho, atomic.LoadInt64(&conn.t0), utils.GetFormattedCurrentTime(time.Now()))
+				rho = time.Duration(1.0 / newRate * 1e9)
+				log.Debugf("[DEBUG] Server rate: %v, Current client rate: %v (%v), t0: %v  at %v", serverRate, lastRate, rho, atomic.LoadInt64(&conn.t0), utils.GetFormattedCurrentTime(time.Now()))
+			} else {
+				rho = time.Duration(1.0 / lastRate * 1e9)
+				//log.Debugf("[DEBUG] Current client rate: %v (%v), t0: %v  at %v", lastRate, rho, atomic.LoadInt64(&conn.t0), utils.GetFormattedCurrentTime(time.Now()))
+			}
 
 			if receiveQ.GetLen() > 0 {
 

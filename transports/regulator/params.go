@@ -1,6 +1,7 @@
 package regulator
 
 import (
+	"github.com/websitefingerprinting/wfdef.git/common/log"
 	"github.com/websitefingerprinting/wfdef.git/common/utils"
 	"math"
 	"sync"
@@ -41,7 +42,7 @@ func (sp *serverParams) CalTargetRate(currentTime time.Time, r int32, d float32)
 
 func CalTargetRateWithLast(lastTime time.Time, currentTime time.Time, r int32, d float32) (newRate int32) {
 	timeElapsed := currentTime.Sub(lastTime)
-	//log.Debugf("[DEBUG] Current time %v, last time %v, elapsed time: %v", currentTime.Format("15:04:05.000000"), lastSend.Format("15:04:05.000000"), timeElapsed)
+	log.Debugf("[DEBUG] Current time %v, last time %v, elapsed time: %v", currentTime.Format("15:04:05.000000"), lastTime.Format("15:04:05.000000"), timeElapsed.Seconds())
 	if timeElapsed >= 0 {
 		newRate = int32(float64(r) * math.Pow(float64(d), timeElapsed.Seconds()))
 		if newRate < 1 {
