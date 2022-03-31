@@ -341,6 +341,10 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 					log.Infof("[Event] BufLen %v > threshold %v, reset start time at %v",
 						bufLen, threshold, utils.GetFormattedCurrentTime(time.Now()))
 				}
+			} else {
+				// defense off, use initial rate, remember to always reset lastSurgeTime
+				sp.SetLastSend()
+				sp.SetTargetRate(conn.r)
 			}
 
 			if receiveBuf.GetLen() > 0 {
@@ -458,6 +462,8 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 						// stateStop with >2 cells -> stateStart
 						// or stateReady with >0 cell -> stateStart
 						log.Infof("[State] Got %v bytes upstream, %s -> %s.", rdLen, defconn.StateMap[conn.ConnState.LoadCurState()], defconn.StateMap[defconn.StateStart])
+						// Remember to reset t0 on the client side at restart
+						atomic.StoreInt64(&conn.t0, time.Now().UnixNano())
 						conn.ConnState.SetState(defconn.StateStart)
 						conn.sendChan <- packetInfo{pktType: defconn.PacketTypeSignalStart, t0: 0,
 							data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
@@ -476,8 +482,9 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 
 	// mainloop, when defense is on, client send packets with rate r/u
 	lastSend = time.Now()
-	lastRate := int32(float32(conn.r) / conn.u)
 	atomic.StoreInt64(&conn.t0, lastSend.UnixNano())
+	initialRate := int32(float32(conn.r) / conn.u)
+	lastRate := initialRate
 	for {
 		select {
 		case conErr := <-conn.ErrChan:
@@ -499,7 +506,7 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 				rho = time.Duration(1.0 / newRate * 1e9)
 				log.Debugf("[DEBUG] Server rate: %v, Current client rate: %v (%v), t0: %v  at %v", serverRate, lastRate, rho, atomic.LoadInt64(&conn.t0), utils.GetFormattedCurrentTime(time.Now()))
 			} else {
-				rho = time.Duration(1.0 / lastRate * 1e9)
+				rho = time.Duration(1.0 / initialRate * 1e9)
 				//log.Debugf("[DEBUG] Current client rate: %v (%v), t0: %v  at %v", lastRate, rho, atomic.LoadInt64(&conn.t0), utils.GetFormattedCurrentTime(time.Now()))
 			}
 
