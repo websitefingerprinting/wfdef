@@ -31,6 +31,7 @@ package regulator // import "github.com/websitefingerprinting/wfdef.git/transpor
 
 import (
 	"bytes"
+	"encoding/binary"
 	"git.torproject.org/pluggable-transports/goptlib.git"
 	queue "github.com/enriquebris/goconcurrentqueue"
 	"github.com/websitefingerprinting/wfdef.git/common/log"
@@ -250,6 +251,7 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 
 	var receiveBuf utils.SafeBuffer
 	var sp serverParams
+	var paddingBudget int32
 
 	sp.Init(conn.r, conn.n)
 	//create a go routine to send out packets to the wire
@@ -303,6 +305,7 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 					// initialize the parameters:
 					// 1) padding budget 2) record current timestamp 3) reset sending rate
 					sp.Init(conn.r, conn.n)
+					atomic.StoreInt32(&paddingBudget, sp.GetPaddingBudget())
 					log.Debugf("[DEBUG] Current padding budget: %v", sp.GetPaddingBudget())
 					log.Debugf("[State] Client signal: %s -> %s.", defconn.StateMap[conn.ConnState.LoadCurState()], defconn.StateMap[defconn.StateStart])
 					conn.ConnState.SetState(defconn.StateStart)
@@ -362,9 +365,16 @@ func (conn *regulatorConn) serverReadFrom(r io.Reader) (written int64, err error
 				//if there is no data in the buffer:
 				//if defense on && has padding budget -> send dummy packet
 				//else: skip (defense off or no padding budget)
-				log.Debugf("[DEBUG] The current padding budget is %v", sp.GetPaddingBudget())
+				currentPaddingBudget := uint32(sp.GetPaddingBudget())
+				totalPaddingBudget := uint32(atomic.LoadInt32(&paddingBudget))
+
+				var dataArr [4 + 4]byte
+				binary.BigEndian.PutUint32(dataArr[:], currentPaddingBudget)
+				binary.BigEndian.PutUint32(dataArr[4:], totalPaddingBudget)
+
+				log.Debugf("[DEBUG] The current padding budget is %v/%v", currentPaddingBudget, totalPaddingBudget)
 				conn.sendChan <- packetInfo{pktType: defconn.PacketTypeDummy, t0: sp.GetLastSend().UnixNano(),
-					data: []byte{}, padLen: defconn.MaxPacketPaddingLength}
+					data: dataArr[:], padLen: defconn.MaxPacketPaddingLength - (4 + 4)}
 			}
 			rho := time.Duration(int64(1.0 / float64(sp.GetTargetRate()) * 1e9))
 			utils.SleepRho(lastSend, rho)
@@ -542,8 +552,8 @@ func (conn *regulatorConn) clientReadFrom(r io.Reader) (written int64, err error
 					log.Debugf("[DEBUG] %v + %v - %v, the tmpTimeGap: %v",
 						utils.GetFormattedCurrentTime(time.Now()), rho, utils.GetFormattedCurrentTime(nextDataTime), tmpTimeGap)
 					if tmpTimeGap > float64(conn.c) {
-						log.Infof("[Event] The next packet is delayed for %v > c:%v, send immediately",
-							tmpTimeGap, conn.c)
+						log.Infof("[Event] The next packet is delayed for %v > c:%v, send immediately, at %v",
+							tmpTimeGap, conn.c, utils.GetFormattedCurrentTime(time.Now()))
 						rho = time.Duration(0)
 					}
 				}

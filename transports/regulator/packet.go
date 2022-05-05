@@ -31,6 +31,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/websitefingerprinting/wfdef.git/common/log"
+	"github.com/websitefingerprinting/wfdef.git/common/utils"
 	"github.com/websitefingerprinting/wfdef.git/transports/defconn"
 	"github.com/websitefingerprinting/wfdef.git/transports/defconn/framing"
 	"io"
@@ -177,6 +178,16 @@ func (conn *regulatorConn) readPackets() (err error) {
 				atomic.StoreInt64(&conn.t0, t0)
 				log.Debugf("[Event] Client Receives new t0: %v", time.Unix(0, t0))
 			}
+
+			if !conn.IsServer {
+				// we let server send its padding budget information to us
+				// just useful for research
+				currrentPaddingBudget := binary.BigEndian.Uint32(payload[:4])
+				totalPaddingBudget := binary.BigEndian.Uint32(payload[4:8])
+				log.Debugf("[Event] The current server padding budget is %v/%v at %v",
+					currrentPaddingBudget, totalPaddingBudget, utils.GetFormattedCurrentTime(time.Now()))
+			}
+
 		default:
 			// Ignore unknown packet types.
 		}

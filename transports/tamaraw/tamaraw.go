@@ -45,20 +45,20 @@ import (
 const (
 	transportName = "tamaraw"
 
-	rhoServerArg  = "rho-server"
-	rhoClientArg  = "rho-client"
-	nSegArg       = "nseg"
+	rhoServerArg = "rho-server"
+	rhoClientArg = "rho-client"
+	nSegArg      = "nseg"
 )
 
 type tamarawClientArgs struct {
 	*defconn.DefConnClientArgs
-	nSeg       int
-	rhoServer  int   // in milliseconds
-	rhoClient  int  // in milliseconds
+	nSeg      int
+	rhoServer int // in milliseconds
+	rhoClient int // in milliseconds
 }
 
 // Transport is the tamaraw implementation of the base.Transport interface.
-type Transport struct{
+type Transport struct {
 	defconn.Transport
 }
 
@@ -74,7 +74,6 @@ func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
 		parentFactory.(*defconn.DefConnClientFactory),
 	}, err
 }
-
 
 // ServerFactory returns a new ServerFactory instance.
 func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFactory, error) {
@@ -122,10 +121,9 @@ func (cf *tamarawClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 		return nil, err
 	}
 
-
 	return &tamarawClientArgs{
 		arguments.(*defconn.DefConnClientArgs),
-		 nSeg.(int), rhoServer.(int), rhoClient.(int),
+		nSeg.(int), rhoServer.(int), rhoClient.(int),
 	}, nil
 }
 
@@ -145,9 +143,9 @@ func (cf *tamarawClientFactory) Dial(network, addr string, dialFn base.DialFunc,
 
 type tamarawServerFactory struct {
 	*defconn.DefConnServerFactory
-	nSeg        int
-	rhoClient    int
-	rhoServer    int
+	nSeg      int
+	rhoClient int
+	rhoServer int
 }
 
 func (sf *tamarawServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
@@ -162,17 +160,15 @@ func (sf *tamarawServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	return c, nil
 }
 
-
 type tamarawConn struct {
 	*defconn.DefConn
-	nSeg       int
-	rhoClient  int
-	rhoServer  int
+	nSeg      int
+	rhoClient int
+	rhoServer int
 }
 
-
 func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
-	log.Debugf("[State] Tamaraw Enter copyloop state: %v at %v", defconn.StateMap[conn.ConnState.LoadCurState()], time.Now().Format("15:04:05.000"))
+	log.Debugf("[State][%s] Tamaraw Enter copyloop state: %v at %v", conn.Conn.RemoteAddr(), defconn.StateMap[conn.ConnState.LoadCurState()], time.Now().Format("15:04:05.000"))
 	defer close(conn.CloseChan)
 	var rho time.Duration
 	if conn.IsServer {
@@ -200,12 +196,12 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 
 		for {
 			select {
-			case _, ok := <- conn.CloseChan:
-				if !ok{
+			case _, ok := <-conn.CloseChan:
+				if !ok {
 					log.Infof("[Routine] Schedule routine exits by closedChan.")
 					return
 				}
-			case <- ticker.C:
+			case <-ticker.C:
 				//ready to send out a packet
 				if receiveBuf.GetLen() > 0 {
 					pktType = defconn.PacketTypePayload
@@ -217,7 +213,7 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 						conn.ErrChan <- rdErr
 					}
 					data = payload[:rdLen]
-					padLen = uint16(defconn.MaxPacketPaddingLength-rdLen)
+					padLen = uint16(defconn.MaxPacketPaddingLength - rdLen)
 					conn.NRealSegSentIncrement()
 				} else {
 					pktType = defconn.PacketTypeDummy
@@ -245,8 +241,8 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 						conn.ConnState.SetState(defconn.StateStart)
 						log.Debugf("[State] %-12s->%-12s", defconn.StateMap[atomic.LoadUint32(&curState)], defconn.StateMap[defconn.StateStart])
 						conn.SendChan <- defconn.PacketInfo{PktType: defconn.PacketTypeSignalStart, Data: []byte{}, PadLen: defconn.MaxPacketPaddingLength}
-					} else  if curState == defconn.StatePadding {
-						if int(curNSeg) % conn.nSeg == 0 {
+					} else if curState == defconn.StatePadding {
+						if int(curNSeg)%conn.nSeg == 0 {
 							log.Debugf("[Event] current nseg is %v", curNSeg)
 							conn.ConnState.SetState(defconn.StateStop)
 							log.Debugf("[State] %-12s->%-12s", defconn.StateMap[atomic.LoadUint32(&curState)], defconn.StateMap[defconn.StateStop])
@@ -260,23 +256,22 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 		}
 	}()
 
-
 	// this go routine regularly check the real throughput
 	// if it is small, change to stop state
 	go func() {
 		ticker := time.NewTicker(defconn.TWindow)
 		defer ticker.Stop()
-		for{
-			select{
-			case _, ok := <- conn.CloseChan:
+		for {
+			select {
+			case _, ok := <-conn.CloseChan:
 				if !ok {
 					log.Infof("[Routine] Ticker routine exits by closeChan.")
 					return
 				}
-			case <- ticker.C:
+			case <-ticker.C:
 				curState := conn.ConnState.LoadCurState()
 				log.Debugf("[State] Real Sent: %v, Real Receive: %v, curState: %s at %v.", conn.NRealSegSentLoad(), conn.NRealSegRcvLoad(), defconn.StateMap[conn.ConnState.LoadCurState()], time.Now().Format("15:04:05.000000"))
-				if !conn.IsServer && curState != defconn.StateStop && (conn.NRealSegSentLoad() < 2 || conn.NRealSegRcvLoad() < 2){
+				if !conn.IsServer && curState != defconn.StateStop && (conn.NRealSegSentLoad() < 2 || conn.NRealSegRcvLoad() < 2) {
 					// if throughput is small, change client's state:
 					// StateReady -> StateStop
 					// StateStart -> StatePadding
@@ -295,18 +290,18 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 
 	for {
 		select {
-		case conErr := <- conn.ErrChan:
+		case conErr := <-conn.ErrChan:
 			log.Infof("downstream copy loop terminated at %v. Reason: %v", time.Now().Format("15:04:05.000000"), conErr)
 			return written, conErr
 		default:
 			buf := make([]byte, 65535)
 			rdLen, err := r.Read(buf[:])
-			if err!= nil {
+			if err != nil {
 				log.Infof("Exit by read err:%v", err)
 				return written, err
 			}
 			if rdLen > 0 {
-				wlen, werr := receiveBuf.Write(buf[: rdLen])
+				wlen, werr := receiveBuf.Write(buf[:rdLen])
 				written += int64(wlen)
 				if werr != nil {
 					return written, werr
@@ -318,7 +313,6 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 		}
 	}
 }
-
 
 var _ base.ClientFactory = (*tamarawClientFactory)(nil)
 var _ base.ServerFactory = (*tamarawServerFactory)(nil)

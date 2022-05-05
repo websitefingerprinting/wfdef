@@ -59,8 +59,6 @@ const (
 	seedArg       = "drbg-seed"
 	certArg       = "cert"
 
-
-
 	seedLength             = drbg.SeedLength
 	headerLength           = framing.FrameOverhead + PacketOverhead
 	clientHandshakeTimeout = time.Duration(60) * time.Second
@@ -70,7 +68,7 @@ const (
 	maxCloseDelay = 60
 	TWindow       = 4000 * time.Millisecond
 
-	LogEnabled      = false
+	LogEnabled = false
 )
 
 type ClientArgs interface {
@@ -118,11 +116,9 @@ func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFa
 		return nil, err
 	}
 
-
 	// Store the arguments that should appear in our descriptor for the clients.
 	ptArgs := pt.Args{}
 	ptArgs.Add(certArg, st.cert.String())
-
 
 	// Initialize the replay filter.
 	filter, err := replayfilter.New(replayTTL)
@@ -183,7 +179,6 @@ func (cf *DefConnClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 		}
 	}
 
-
 	// Generate the session key pair before connectiong to hide the Elligator2
 	// rejection sampling from network observers.
 	sessionKey, err := ntor.NewKeypair(true)
@@ -191,7 +186,7 @@ func (cf *DefConnClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 		return nil, err
 	}
 
-	return &DefConnClientArgs{nodeID, publicKey, sessionKey,}, nil
+	return &DefConnClientArgs{nodeID, publicKey, sessionKey}, nil
 }
 
 func (cf *DefConnClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
@@ -216,12 +211,12 @@ type DefConnServerFactory struct {
 	transport base.Transport
 	args      *pt.Args
 
-	nodeID       *ntor.NodeID
-	identityKey  *ntor.Keypair
-	lenSeed      *drbg.Seed
-	
+	nodeID      *ntor.NodeID
+	identityKey *ntor.Keypair
+	lenSeed     *drbg.Seed
+
 	replayFilter *replayfilter.ReplayFilter
-	closeDelay int
+	closeDelay   int
 }
 
 func (sf *DefConnServerFactory) Transport() base.Transport {
@@ -245,7 +240,6 @@ func (sf *DefConnServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-
 
 	lenDist := probdist.New(sf.lenSeed, 0, framing.MaximumSegmentLength, false)
 
@@ -276,9 +270,9 @@ type DefConn struct {
 	nRealSegRcv  uint32
 	ConnState    *State
 
-	CloseChan   chan int   //used to signal go routines for stop
-	ErrChan     chan error //used to send err between go routines
-	SendChan    chan PacketInfo //used to send packets to the send routine
+	CloseChan chan int        //used to signal go routines for stop
+	ErrChan   chan error      //used to send err between go routines
+	SendChan  chan PacketInfo //used to send packets to the send routine
 
 	ReceiveBuffer        *bytes.Buffer
 	ReceiveDecodedBuffer *bytes.Buffer
@@ -287,7 +281,6 @@ type DefConn struct {
 	Encoder *framing.Encoder
 	Decoder *framing.Decoder
 }
-
 
 func newdefconnClientConn(conn net.Conn, args ClientArgs) (c *DefConn, err error) {
 	// Generate the initial protocol polymorphism distribution(s).
@@ -300,7 +293,6 @@ func newdefconnClientConn(conn net.Conn, args ClientArgs) (c *DefConn, err error
 	closeChan := make(chan int)
 	errChan := make(chan error, 10)
 	sendChan := make(chan PacketInfo, 10000)
-
 
 	// Allocate the client structure.
 	c = &DefConn{conn, false, lenDist, 0, 0, NewState(), closeChan, errChan, sendChan, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, ConsumeReadSize), nil, nil}
@@ -442,7 +434,7 @@ type ReadPacketsFuncType func() error
 
 // utils
 // Read interface with customized readPackets function
-func (conn *DefConn) MyRead(b []byte, readPacketsFunc ReadPacketsFuncType)(n int, err error) {
+func (conn *DefConn) MyRead(b []byte, readPacketsFunc ReadPacketsFuncType) (n int, err error) {
 	// If there is no payload from the previous Read() calls, consume Data off
 	// the network.  Not all Data received is guaranteed to be usable payload,
 	// so do this in a loop till Data is present or an error occurs.
@@ -503,20 +495,20 @@ func (conn *DefConn) Read(b []byte) (n int, err error) {
 }
 
 // utils
-func(conn *DefConn) Send() {
+func (conn *DefConn) Send() {
 	//A dedicated function responsible for sending out packets coming from conn.SendChan
 	//Err is propagated via conn.ErrChan
 	for {
-		select{
-		case _, ok := <- conn.CloseChan:
-			if !ok{
+		select {
+		case _, ok := <-conn.CloseChan:
+			if !ok {
 				log.Infof("[Routine] Send routine exits by closedChan.")
 				return
 			}
-		case packetInfo := <- conn.SendChan:
+		case packetInfo := <-conn.SendChan:
 			pktType := packetInfo.PktType
-			data    := packetInfo.Data
-			padLen  := packetInfo.PadLen
+			data := packetInfo.Data
+			padLen := packetInfo.PadLen
 			var frameBuf bytes.Buffer
 			err := conn.MakePacket(&frameBuf, pktType, data, padLen)
 			if err != nil {
@@ -534,12 +526,11 @@ func(conn *DefConn) Send() {
 			if !conn.IsServer && LogEnabled {
 				log.Infof("[TRACE_LOG] %d %d %d", time.Now().UnixNano(), int64(len(data)), int64(padLen))
 			} else {
-				log.Debugf("[Send] %-8s, %-3d+ %-3d bytes at %v", PktTypeMap[pktType], len(data), padLen, time.Now().Format("15:04:05.000"))
+				log.Debugf("[Send][%s] %-8s, %-3d+ %-3d bytes at %v", conn.RemoteAddr(), PktTypeMap[pktType], len(data), padLen, time.Now().Format("15:04:05.000"))
 			}
 		}
 	}
 }
-
 
 func (conn *DefConn) ReadFrom(r io.Reader) (written int64, err error) {
 	log.Infof("[State] Enter parent copyloop state: %v (%v is stateStart, %v is statStop)", conn.ConnState.LoadCurState(), StateStart, StateStop)
@@ -550,20 +541,19 @@ func (conn *DefConn) ReadFrom(r io.Reader) (written int64, err error) {
 	//create a go routine to send out packets to the wire
 	go conn.Send()
 
-
 	// this go routine regularly check the real throughput
 	// if it is small, change to stop state
 	go func() {
 		ticker := time.NewTicker(TWindow)
 		defer ticker.Stop()
-		for{
-			select{
-			case _, ok := <- conn.CloseChan:
+		for {
+			select {
+			case _, ok := <-conn.CloseChan:
 				if !ok {
 					log.Infof("[Routine] Ticker routine exits by closeChan.")
 					return
 				}
-			case <- ticker.C:
+			case <-ticker.C:
 				log.Debugf("[State] Real Sent: %v, Real Receive: %v, curState: %s at %v.", conn.NRealSegSentLoad(), conn.NRealSegRcvLoad(), StateMap[conn.ConnState.LoadCurState()], time.Now().Format("15:04:05.000000"))
 				if !conn.IsServer && conn.ConnState.LoadCurState() != StateStop && (conn.NRealSegSentLoad() < 2 || conn.NRealSegRcvLoad() < 2) {
 					log.Infof("[State] %s -> %s.", StateMap[conn.ConnState.LoadCurState()], StateMap[StateStop])
@@ -577,18 +567,18 @@ func (conn *DefConn) ReadFrom(r io.Reader) (written int64, err error) {
 
 	for {
 		select {
-		case conErr := <- conn.ErrChan:
+		case conErr := <-conn.ErrChan:
 			log.Infof("downstream copy loop terminated at %v. Reason: %v", time.Now().Format("15:04:05.000000"), conErr)
 			return written, conErr
 		default:
 			buf := make([]byte, 65535)
 			rdLen, err := r.Read(buf[:])
-			if err!= nil {
+			if err != nil {
 				log.Errorf("Exit by read err:%v", err)
 				return written, err
 			}
 			if rdLen > 0 {
-				receiveBuf.Write(buf[: rdLen])
+				receiveBuf.Write(buf[:rdLen])
 			} else {
 				log.Errorf("BUG? read 0 bytes, err: %v", err)
 				return written, io.EOF
@@ -615,13 +605,12 @@ func (conn *DefConn) ReadFrom(r io.Reader) (written int64, err error) {
 					log.Infof("Exit by read buffer err:%v", rdErr)
 					return written, rdErr
 				}
-				conn.SendChan <- PacketInfo{PktType: PacketTypePayload, Data: payload[:rdLen], PadLen: uint16(MaxPacketPaddingLength -rdLen)}
+				conn.SendChan <- PacketInfo{PktType: PacketTypePayload, Data: payload[:rdLen], PadLen: uint16(MaxPacketPaddingLength - rdLen)}
 				conn.NRealSegSentIncrement()
 			}
 		}
 	}
 }
-
 
 func (conn *DefConn) SetDeadline(t time.Time) error {
 	return syscall.ENOTSUP
@@ -649,8 +638,6 @@ func (conn *DefConn) closeAfterDelay(sf *DefConnServerFactory, startTime time.Ti
 	// passes.
 	_, _ = io.Copy(ioutil.Discard, conn.Conn)
 }
-
-
 
 var _ base.ClientFactory = (*DefConnClientFactory)(nil)
 var _ base.ServerFactory = (*DefConnServerFactory)(nil)
