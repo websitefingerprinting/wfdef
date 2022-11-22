@@ -1,11 +1,21 @@
 package utils
 
 import (
+	"bufio"
 	"fmt"
 	pt "git.torproject.org/pluggable-transports/goptlib.git"
+	"github.com/mikioh/tcp"
+	"github.com/mikioh/tcpinfo"
+	"github.com/websitefingerprinting/wfdef.git/common/log"
+	"net"
+
+	//"log"
+	"math"
+	"math/rand"
+	"os"
 	"strconv"
-	"time"
 	"strings"
+	"time"
 )
 
 func SleepRho(lastSend time.Time, rho time.Duration)  {
@@ -42,4 +52,63 @@ func ParseArgByKey(args *pt.Args, key string, kind string) (interface{}, error) 
 		return arg, nil
 	}
 	return nil, fmt.Errorf("wrong kind: '%s'", kind)
+}
+
+
+func ReadFloatFromFile(fdir string) []float64{
+	file, err := os.Open(fdir)
+	if err != nil {
+		log.Errorf("[ERR] Fail to open file: %v", err)
+	}
+	defer file.Close()
+	var arr []float64
+	scanner := bufio.NewScanner(file)
+	startTime := time.Now()
+	for scanner.Scan() {
+		lineStr := scanner.Text()
+		num, sErr := strconv.ParseFloat(lineStr, 64)
+		if sErr == nil {
+			arr = append(arr,num)
+		}
+	}
+	log.Debugf("Successfully loading %v ipt info in %v", len(arr), time.Since(startTime))
+	return arr
+}
+
+
+func SampleIPT(arr []float64) float64{
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	std := arr[0]
+	l := len(arr) -1
+	ind := r.Intn(l) + 1
+	res := arr[ind] + r.NormFloat64()*std
+	res = math.Pow(10, res)
+	res *= 1000  // seconds to milliseconds
+	if res < 0 {
+		//negative ipt
+		res = 0
+	}
+	return res
+}
+
+func EstimateTCPCapacity(conn net.Conn) (capacity int, err error){
+	tc, err := tcp.NewConn(conn)
+	if err != nil {
+		return 0, err
+	}
+
+	var o tcpinfo.Info
+	var b [256]byte
+	i, err := tc.Option(o.Level(), o.Name(), b[:])
+	if j, ok := i.(*tcpinfo.Info); ok{
+		snd_cwnd := int(j.CongestionControl.SenderWindowSegs)
+		//unacked := int(j.Sys.UnackedSegs)
+		unacked := 0 //macos no such info
+
+		capacity = (snd_cwnd - unacked) * int(j.SenderMSS)
+		return capacity, nil
+	}
+
+
+	return 0, err
 }

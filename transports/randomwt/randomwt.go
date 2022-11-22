@@ -738,7 +738,7 @@ func (conn *randomwtConn) sampleDummyBurst (n int, writeChan chan PacketInfo) (b
 	if atomic.LoadUint32(&conn.state) == stateStop {
 		return 0
 	}
-	burstSize = utils.Uniform(0, n) // sample a number between 0 ~ n
+	burstSize = utils.UniformInt(0, n) // sample a number between 0 ~ n
 	log.Debugf("Max N: %v, sampled N: %v", n, burstSize)
 	for i := 0; i < burstSize; i++ {
 		writeChan <- PacketInfo{pktType: packetTypeDummy, data: []byte{}, padLen: maxPacketPaddingLength}

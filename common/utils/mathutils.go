@@ -30,25 +30,39 @@ func IntAbs(a int) int {
 	return a
 }
 
+
 func Bernoulli(p float64) int {
-	dist := distuv.Bernoulli{
+	berDist := distuv.Bernoulli{
 		P:   p,
 		Src: expRand.NewSource(uint64(time.Now().UTC().UnixNano())),
 	}
-	return int(dist.Rand())
+	return int(berDist.Rand())
 }
 
-func Uniform(min int, max int) int {
+func Beta(p float64) float64 {
+	//First sample a p from Beta distribution, then sample a number from B(p)
+	betaDist := distuv.Beta{
+		Alpha: p * 10.0 + 1,
+		Beta: (1-p) * 10.0 + 1,
+		Src: expRand.NewSource(uint64(time.Now().UTC().UnixNano())),
+	}
+
+	return betaDist.Rand()
+}
+
+func UniformInt(min int, max int) int {
 	// sample a number between [min, max]
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return r.Intn(max - min + 1) + min
-	//dist := distuv.Uniform{
-	//	Min: min,
-	//	Max: max,
-	//	Src: expRand.NewSource(uint64(time.Now().UTC().UnixNano())),
-	//}
-	//return int(dist.Rand())
 }
 
+func UniformFloat(min float64, max float64) float64 {
+	dist := distuv.Uniform{
+		Min: min,
+		Max: max,
+		Src: expRand.NewSource(uint64(time.Now().UTC().UnixNano())),
+	}
+	return dist.Rand()
+}
 
 

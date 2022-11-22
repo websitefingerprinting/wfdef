@@ -1,0 +1,17 @@
+syntax = "proto3";
+package pb;
+
+option go_package = "github.com/websitefingerprinting/wfdef/transports/wfgan/grpc/pb";
+
+
+message GANResponse {
+  repeated int32 packets = 1;
+}
+
+message GANRequest {
+  int32 ask = 1;
+}
+
+service GenerateTrace {
+  rpc Query(GANRequest) returns (GANResponse) {}
+}

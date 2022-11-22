@@ -1,26 +1,39 @@
-# WFDefProxy
+# Surakav Implementation
+<div >
+<img src="https://img.shields.io/badge/Surakav-1.0.0-brightgreen.svg?logo=data:image/png;base64,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">
+</div>
 
 ## What?
+This repository extends WFDefProxy [5], a framework that has already implemented a bunch of defenses against Website Fingerprinting (WF) attacks, to implement our defense Surakav. 
+
 WFDefProxy implements three defenses against Website Fingerprinting (WF) attack: FRONT [1], Tamaraw [2] and Random-WT [3]. 
 It extends obfs4proxy [4], the state-of-the-art pluggable transport for Tor to circumvent censorship. 
 It transforms the traffic between the client and the bridge according to a defense's protocol.
 It makes use of the cryptographic system of obfs4 to do the handshake as well as to encrypt/decrypt the packets.
-The workflow of WFDefProxy is shown in the figure below:
-<div  align="center"> 
-<img src="./imgs/wfdefproxy.png" style="zoom:20%;" />
-</div>
+
+[comment]: <> (The workflow of WFDefProxy is shown in the figure below:)
+
+[comment]: <> (<div  align="center"> )
+
+[comment]: <> (<img src="https://anonymous.4open.science/r/wfdef-11EF/imgs/wfdefproxy.png" style="zoom:20%;" />)
+
+[comment]: <> (</div>)
+
+[//]: # (## Some Notes)
+
+[//]: # (- This branch of repository is specially made for the double-blind review process. The package names are obfuscated in the code with the word `anonymous`.  )
+
+[//]: # ()
+[//]: # (- It is a fork of WFDefProxy, and we added our proposed WF defense Surakav on it. )
 
 ## Table of Contents
 - [How to use?](#how-to-use-)
     * [To build:](#to-build-)
+    * [To run **Surakav** (our defense)](#to-run---Surakav--) 
     * [To run **FRONT**](#to-run---front--)
     * [To run **Tamaraw**](#to-run---tamaraw--)
     * [To run **Random-WT**](#to-run---random-wt--)
 - [How does WFDefProxy work?](#how-does-wfdefproxy-work-)
-    * [Overview](#overview)
-    * [Finite State Machine](#finite-state-machine)
-    * [Core functions](#core-functions)
-- [To implement other defenses?](#to-implement-other-defenses)
 - [Tips and tricks](#tips-and-tricks)
 
 <span id="how-to-use-">
@@ -36,6 +49,49 @@ The workflow of WFDefProxy is shown in the figure below:
 Suppose we put the compiled binary at `/Users/example/wfdef/obfs4proxy/obfs4proxy`.
 
 </span>
+
+<span id="to-run---Surakav--">
+
+### To run Surakav (our defense)
+The torrc configuration of bridge is like:
+```
+# Feel free to adapt the path.
+DataDirectory /Users/example/tor-config/log-wfgan-server  
+Log notice stdout    
+SOCKSPort 9052    
+AssumeReachable 1    
+PublishServerDescriptor 0    
+Exitpolicy reject *:*    
+ORPort auto   
+ExtORPort auto
+Nickname "wfdef"    
+BridgeRelay 1    
+ServerTransportListenAddr wfgan 0.0.0.0:34000
+ServerTransportPlugin wfgan exec /Users/example/wfdef/obfs4proxy/obfs4proxy
+ServerTransportOptions wfgan tol=0.4
+```
+It will generate a `wfgan_bridgeline.txt` in `/Users/example/tor-config/log-wfgan-server/pt_state`,
+containing a certification used for handshake as well as the configured parameters.
+
+The client's torrc file is like:
+```
+DataDirectory /Users/example/tor-config/log-wfgan-client 
+Log notice stdout    
+SOCKSPort 9050  
+ControlPort 9051  
+UseBridges 1    
+Bridge front 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ tol=0.4
+ClientTransportPlugin wfgan exec /Users/example/wfdef/obfs4proxy/obfs4proxy
+```
+
+You can launch Tor with command line `tor -f client-torrc` or replace Tor Browser's torrc file with it and launch the Tor Browser directly.
+Note that if is better to also include the relay's fingerprint in `Bridge` option due to some bugs of Tor Browser that may cause the launch failure.
+
+
+
+
+</span>
+
 
 <span id="to-run---front--">
 
@@ -114,70 +170,8 @@ ClientTransportPlugin randomwt exec /Users/example/wfdef/obfs4proxy/obfs4proxy
 
 ## How does WFDefProxy work?
 
-<span id="overview">
 
-### Overview
-We nearly keep the framework of obfs4proxy unchanged, except that we add four different transports in `./transports`:
-* **null**: do nothing but forward the packets between client and the bridge, can be used for collecting undefended datasets
-* **front**: implement FRONT defense
-* **tamaraw**: implement tamaraw defense
-* **random-wt**: implement random-wt defense
-
-The key modules for each transport:
-* `packet.go`: define the packet format, the types of packets and how to parse the packets
-* `statefile.go`: define the parameters, validity checks for the parameter values and the format of bridgeline.txt
-* `[defense].go`: implement the defense, control the state transitions
-*  `state.go`: define the states of the defense
-
-</span>
-
-<span id="finite-state-machine">
-
-### Finite State Machine
-Below are the state machines for three defenses on the client side (1.FRONT 2.Tamaraw 3.Random-WT).
-<div  align="center"> 
-<img src="./imgs/front-fsm.png" style="zoom:33%;" />
-<img src="./imgs/tamaraw-fsm.png" style="zoom:33%;" />
-<img src="./imgs/randomwt-fsm.png" style="zoom:33%;" />
-</div>
-
-The start and end of a defense is controlled by a finite state machine, where a event will trigger some actions and state transition.
-We define that any **two packets** from upstream within 1s will cause the client enter the Start state from Stop state.
-And we set a time window of 1s and keep observing the throughput when the defense is on. 
-If there is no more than **one packet**, the defense will return to the Stop State (For Tamaraw, enter the Padding state).
-
-On the bridge side, the start and stop of the defense is controlled by the client without such a state machine.
-When client turns on/off the defense, it will send a signal packet to the bridge and trigger the corresponding actions.
-
-</span>
-
-<span id="core-functions">
-
-### Core functions
-To implement a transport (defense), we MUST have two core functions
-* `func (conn *someDefenseConn) ReadFrom(r io.Reader) (written int64, err error)`:
-  this function intercepts data from Tor, modifies the data according to the defense and forwards to the WFDefProxy on the other side.
-* `func (conn *someDefenseConn) Read(b []byte) (n int, err error)`:
-  this function receives data from the WFDefProxy on the other side, parses the defended packets and forwards to Tor.
-
-</span>
-
-</span>
-
-
-<span id="to-implement-other-defenses">
-
-## To implement other defenses
-If you want to implement a new defense on WFDefProxy, there are two main steps to follow:
-1. In WFDefProxy, a defense protocol is referred to as a "transport". 
-   `transports/base/base.go` defines the template for a transport.
-   You should implement all the interfaces in your defense.
-2. Rigister your transport (defense) in `transports/transports.go` (See `func Init() error`).
-3. Some suggestion on the implementation:
-    * Write a `statefile.go` to deal with arguments of a defense. 
-    * Write a `packet.go` which defines the packet format and the function of parsing the packets from the other side.
-    * For the defense, you should define a new connection type which extends `net.Conn`. Therefore, you should implement `Write` and `Read` function for the transport. 
-    These two functions will automatically be called in the main programme `obfs4proxy/obfs4proxy.go` (See Line 270 `copyLoop(a net.Conn, b net.Conn) error`).
+See the original paper for the design details of WFDefProxy [5]. 
 
 </span>
 
@@ -206,7 +200,8 @@ If you want to implement a new defense on WFDefProxy, there are two main steps t
     ```
     When received a message with `turnOn=true`, WFDefProxy will log the packet information (timestamp, direction and size) to `filePath`.
     When received a message with `turnOn=false`, WFDefProxy will stop logging.
-* WFDefProxy can be used together with [WFCrawler](https://github.com/websitefingerprinting/WFCrawler), the toolkit we developed for crawling and parsing traces.
+
+[comment]: <> (* WFDefProxy can be used together with [WFCrawler]&#40;https://github.com/anonymous/WFCrawler&#41;, the toolkit we developed for crawling and parsing traces.)
 
 </span>
 
@@ -231,11 +226,16 @@ the same dependency versions, while `go get -d` always downloads master.
 
 [4] [Yawning, Angel. "obfs4 - The obfourscator"](https://github.com/Yawning/obfs4)
 
+[5] [Gong, Jiajun, et al. "WFDefProxy:Modularly Implementing and Empirically Evaluating Website Fingerprinting Defenses"](https://arxiv.org/abs/2111.12629)
+
 ## Disclaimer
 This repository is only intended for research purpose. 
 Codes may have bugs.
 We do not guarantee it secure against any attacker in the real world. 
 Please be cautious if you want to use it in the real Tor network.
 
-## Thanks
- * Yawning Angel for explaining the code of obfs4proxy
+[comment]: <> (## Thanks)
+
+[comment]: <> ( * Yawning Angel for explaining the code of obfs4proxy)
+
+[comment]: <> ( * Wuqi Zhang for providing the technical support for extending the framework.)

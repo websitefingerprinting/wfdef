@@ -65,19 +65,18 @@ const (
 	rhoClientArg  = "rho-client"
 	nSegArg       = "nseg"
 
-
 	seedLength             = drbg.SeedLength
 	headerLength           = framing.FrameOverhead + packetOverhead
 	clientHandshakeTimeout = time.Duration(60) * time.Second
 	serverHandshakeTimeout = time.Duration(30) * time.Second
 	replayTTL              = time.Duration(3) * time.Hour
 
-	maxCloseDelay      = 60
-	tWindow            = 1000 * time.Millisecond
+	maxCloseDelay = 60
+	tWindow       = 2000 * time.Millisecond
 
-	gRPCAddr           = "localhost:10086"
-	traceLogEnabled    = false
-	logEnabled         = true
+	gRPCAddr        = "localhost:10086"
+	traceLogEnabled = false
+	logEnabled      = true
 )
 
 type tamarawClientArgs struct {
@@ -85,8 +84,8 @@ type tamarawClientArgs struct {
 	publicKey  *ntor.PublicKey
 	sessionKey *ntor.Keypair
 	nSeg       int
-	rhoServer  int   // in milliseconds
-	rhoClient  int  // in milliseconds
+	rhoServer  int // in milliseconds
+	rhoClient  int // in milliseconds
 }
 
 // Transport is the tamaraw implementation of the base.Transport interface.
@@ -110,14 +109,12 @@ func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFa
 		return nil, err
 	}
 
-
 	// Store the arguments that should appear in our descriptor for the clients.
 	ptArgs := pt.Args{}
 	ptArgs.Add(certArg, st.cert.String())
 	ptArgs.Add(nSegArg, strconv.Itoa(st.nSeg))
 	ptArgs.Add(rhoServerArg, strconv.Itoa(st.rhoServer))
 	ptArgs.Add(rhoClientArg, strconv.Itoa(st.rhoClient))
-
 
 	// Initialize the replay filter.
 	filter, err := replayfilter.New(replayTTL)
@@ -178,7 +175,6 @@ func (cf *tamarawClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 		}
 	}
 
-
 	nSegStr, nSegOk := args.Get(nSegArg)
 	if !nSegOk {
 		return nil, fmt.Errorf("missing argument '%s'", nSegArg)
@@ -197,7 +193,7 @@ func (cf *tamarawClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("malformed rho-client '%s'", rhoServerStr)
 	}
-	
+
 	rhoClientStr, rhoClientOk := args.Get(rhoClientArg)
 	if !rhoClientOk {
 		return nil, fmt.Errorf("missing argument '%s'", rhoClientArg)
@@ -207,7 +203,6 @@ func (cf *tamarawClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("malformed rho-client '%s'", rhoClientStr)
 	}
-
 
 	// Generate the session key pair before connectiong to hide the Elligator2
 	// rejection sampling from network observers.
@@ -241,16 +236,16 @@ type tamarawServerFactory struct {
 	transport base.Transport
 	args      *pt.Args
 
-	nodeID       *ntor.NodeID
-	identityKey  *ntor.Keypair
-	lenSeed      *drbg.Seed
-	
-	nSeg        int
-	rhoServer    int
-	rhoClient    int
-	
+	nodeID      *ntor.NodeID
+	identityKey *ntor.Keypair
+	lenSeed     *drbg.Seed
+
+	nSeg      int
+	rhoServer int
+	rhoClient int
+
 	replayFilter *replayfilter.ReplayFilter
-	closeDelay int
+	closeDelay   int
 }
 
 func (sf *tamarawServerFactory) Transport() base.Transport {
@@ -278,7 +273,7 @@ func (sf *tamarawServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	lenDist := probdist.New(sf.lenSeed, 0, framing.MaximumSegmentLength, false)
 	logger := &traceLogger{gRPCServer: grpc.NewServer(), logOn: nil, logPath: nil}
 	// The server's initial state is intentionally set to stateStart at the very beginning to obfuscate the RTT between client and server
-	c := &tamarawConn{conn, true, lenDist,  sf.nSeg, sf.rhoClient, sf.rhoServer, logger, stateStop, nil, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
+	c := &tamarawConn{conn, true, lenDist, sf.nSeg, sf.rhoClient, sf.rhoServer, 0, 0, logger, stateStop, nil, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
 	log.Debugf("Server pt con status: %v %v %v %v", c.isServer, c.nSeg, c.rhoClient, c.rhoServer)
 	startTime := time.Now()
 
@@ -294,16 +289,19 @@ func (sf *tamarawServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 type tamarawConn struct {
 	net.Conn
 
-	isServer  bool
+	isServer bool
 
 	lenDist   *probdist.WeightedDist
-	nSeg       int
-	rhoClient  int
-	rhoServer  int
+	nSeg      int
+	rhoClient int
+	rhoServer int
+
+	nRealSegSent uint32 // real packet counter over tWindow second
+	nRealSegRcv  uint32
 
 	logger *traceLogger
 
-	state     uint32
+	state uint32
 
 	loggerChan           chan []int64
 	receiveBuffer        *bytes.Buffer
@@ -313,7 +311,6 @@ type tamarawConn struct {
 	encoder *framing.Encoder
 	decoder *framing.Decoder
 }
-
 
 func newTamarawClientConn(conn net.Conn, args *tamarawClientArgs) (c *tamarawConn, err error) {
 	// Generate the initial protocol polymorphism distribution(s).
@@ -331,15 +328,15 @@ func newTamarawClientConn(conn net.Conn, args *tamarawClientArgs) (c *tamarawCon
 
 	logPath := atomic.Value{}
 	logPath.Store("")
-	logOn  := atomic.Value{}
+	logOn := atomic.Value{}
 	logOn.Store(false)
 	server := grpc.NewServer()
 	logger := &traceLogger{gRPCServer: server, logOn: &logOn, logPath: &logPath}
 
-	pb.RegisterTraceLoggingServer(logger.gRPCServer, &traceLoggingServer{callBack:logger.UpdateLogInfo})
+	pb.RegisterTraceLoggingServer(logger.gRPCServer, &traceLoggingServer{callBack: logger.UpdateLogInfo})
 
 	// Allocate the client structure.
-	c = &tamarawConn{conn, false, lenDist, args.nSeg, args.rhoClient, args.rhoServer, logger, stateStop, loggerChan, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
+	c = &tamarawConn{conn, false, lenDist, args.nSeg, args.rhoClient, args.rhoServer, 0, 0, logger, stateStop, loggerChan, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
 
 	log.Debugf("client pt con status: %v %v %v %v", c.isServer, c.nSeg, c.rhoClient, c.rhoServer)
 	// Start the handshake timeout.
@@ -520,7 +517,6 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 	}
 
 	var curNSeg uint32 = 0
-	var realNSeg uint32 = 0 //the number of real packets over the latest windowSize time
 	sendChan := make(chan PacketInfo, 65535) // all packed packets are sent through this channel
 	var receiveBuf bytes.Buffer
 
@@ -549,13 +545,13 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 			log.Infof("[Routine] Client traceLogger turns on.")
 			for {
 				select {
-				case _, ok := <- closeChan:
+				case _, ok := <-closeChan:
 					if !ok {
 						conn.logger.gRPCServer.Stop()
 						log.Infof("[Routine] traceLogger exits by closeChan signal.")
 						return
 					}
-				case pktinfo, ok := <- conn.loggerChan:
+				case pktinfo, ok := <-conn.loggerChan:
 					if !ok {
 						log.Debugf("[Routine] traceLogger exits: %v.")
 						return
@@ -566,7 +562,6 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 		}()
 	}
 
-
 	//create a go routine to send out packets to the wire
 	go func() {
 		ticker := time.NewTicker(rho)
@@ -575,22 +570,22 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 		var data []byte
 		var padLen uint16
 		for {
-			select{
-			case _, ok := <- closeChan:
-				if !ok{
+			select {
+			case _, ok := <-closeChan:
+				if !ok {
 					log.Infof("[Routine] Send routine exits by closedChan.")
 					return
 				}
-			case <- ticker.C:
+			case <-ticker.C:
 				atomic.AddUint32(&curNSeg, 1)
 				var frameBuf bytes.Buffer
 				var curState uint32
 				if len(sendChan) > 0 {
 					// pkts in the queue: possibly signal ones or real ones
-					packetInfo := <- sendChan
+					packetInfo := <-sendChan
 					pktType = packetInfo.pktType
-					data    = packetInfo.data
-					padLen  = packetInfo.padLen
+					data = packetInfo.data
+					padLen = packetInfo.padLen
 				} else {
 					pktType = packetTypeDummy
 					data = []byte{}
@@ -617,7 +612,8 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 				if !conn.isServer && traceLogEnabled && conn.logger.logOn.Load().(bool) {
 					conn.loggerChan <- []int64{time.Now().UnixNano(), int64(len(data)), int64(padLen)}
 				}
-				if !conn.isServer && logEnabled{
+
+				if !conn.isServer && logEnabled {
 					log.Infof("[TRACE_LOG] %d %d %d", time.Now().UnixNano(), int64(len(data)), int64(padLen))
 				}
 				//log.Debugf("[Send] %-8s, %-3d+ %-3d bytes at %v", pktTypeMap[pktType], len(data), padLen, time.Now().Format("15:04:05.000"))
@@ -635,8 +631,8 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 						atomic.StoreUint32(&conn.state, stateStart)
 						log.Debugf("[State] %-12s->%-12s", stateMap[atomic.LoadUint32(&curState)], stateMap[stateStart])
 						sendChan <- PacketInfo{pktType: packetTypeSignalStart, data: []byte{}, padLen: maxPacketPaddingLength}
-					} else  if curState == statePadding {
-						if int(curNSeg) % conn.nSeg == 0 {
+					} else if curState == statePadding {
+						if int(curNSeg)%conn.nSeg == 0 {
 							log.Debugf("[Event] current nseg is %v", curNSeg)
 							atomic.StoreUint32(&conn.state, stateStop)
 							log.Debugf("[State] %-12s->%-12s", stateMap[atomic.LoadUint32(&curState)], stateMap[stateStop])
@@ -649,23 +645,22 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 		}
 	}()
 
-
 	// this go routine regularly check the real throughput
 	// if it is small, change to stop state
 	go func() {
-		ticker := time.NewTicker(time.Second)
+		ticker := time.NewTicker(tWindow)
 		defer ticker.Stop()
-		for{
-			select{
-			case _, ok := <- closeChan:
+		for {
+			select {
+			case _, ok := <-closeChan:
 				if !ok {
 					log.Infof("[Routine] Ticker routine exits by closeChan.")
 					return
 				}
-			case <- ticker.C:
+			case <-ticker.C:
 				curState := atomic.LoadUint32(&conn.state)
-				//log.Debugf("[Event] NRealSeg %v at %v", realNSeg, time.Now().Format("15:04:05.000000"))
-				if !conn.isServer && curState != stateStop && atomic.LoadUint32(&realNSeg) < 2 {
+				log.Debugf("[State] Real Sent: %v, Real Receive: %v, curState: %s at %v.", conn.nRealSegSent, conn.nRealSegRcv, stateMap[atomic.LoadUint32(&conn.state)], time.Now().Format("15:04:05.000000"))
+				if !conn.isServer && curState != stateStop && (atomic.LoadUint32(&conn.nRealSegSent) < 2 || atomic.LoadUint32(&conn.nRealSegRcv) < 2) {
 					// if throughput is small, change client's state:
 					// stateReady -> stateStop
 					// stateStart -> statePadding
@@ -677,25 +672,26 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 						log.Debugf("[State] %-12s->%-12s", stateMap[curState], stateMap[statePadding])
 					}
 				}
-				atomic.StoreUint32(&realNSeg, 0) //reset counter
+				atomic.StoreUint32(&conn.nRealSegSent, 0) //reset counter
+				atomic.StoreUint32(&conn.nRealSegRcv, 0)  //reset counter
 			}
 		}
 	}()
 
 	for {
 		select {
-		case conErr := <- errChan:
+		case conErr := <-errChan:
 			log.Infof("downstream copy loop terminated at %v. Reason: %v", time.Now().Format("15:04:05.000000"), conErr)
 			return written, conErr
 		default:
 			buf := make([]byte, 65535)
 			rdLen, err := r.Read(buf[:])
-			if err!= nil {
+			if err != nil {
 				log.Infof("Exit by read err:%v", err)
 				return written, err
 			}
 			if rdLen > 0 {
-				receiveBuf.Write(buf[: rdLen])
+				receiveBuf.Write(buf[:rdLen])
 			} else {
 				log.Errorf("BUG? read 0 bytes, err: %v", err)
 				return written, io.EOF
@@ -709,8 +705,8 @@ func (conn *tamarawConn) ReadFrom(r io.Reader) (written int64, err error) {
 					log.Infof("Exit by read buffer err:%v", rdErr)
 					return written, rdErr
 				}
-				sendChan <- PacketInfo{pktType: packetTypePayload, data: payload[:rdLen], padLen: uint16(maxPacketPaddingLength-rdLen)}
-				atomic.AddUint32(&realNSeg, 1)
+				sendChan <- PacketInfo{pktType: packetTypePayload, data: payload[:rdLen], padLen: uint16(maxPacketPaddingLength - rdLen)}
+				atomic.AddUint32(&conn.nRealSegSent, 1)
 			}
 		}
 	}
@@ -742,8 +738,6 @@ func (conn *tamarawConn) closeAfterDelay(sf *tamarawServerFactory, startTime tim
 	// passes.
 	_, _ = io.Copy(ioutil.Discard, conn.Conn)
 }
-
-
 
 var _ base.ClientFactory = (*tamarawClientFactory)(nil)
 var _ base.ServerFactory = (*tamarawServerFactory)(nil)

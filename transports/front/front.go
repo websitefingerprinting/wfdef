@@ -73,28 +73,26 @@ const (
 	nServerArg    = "n-server"
 	nClientArg    = "n-client"
 
-
-
 	seedLength             = drbg.SeedLength
 	headerLength           = framing.FrameOverhead + packetOverhead
 	clientHandshakeTimeout = time.Duration(60) * time.Second
 	serverHandshakeTimeout = time.Duration(30) * time.Second
 	replayTTL              = time.Duration(3) * time.Hour
 
-	maxCloseDelay      = 60
-	tWindow            = 1000 * time.Millisecond
+	maxCloseDelay = 60
+	tWindow       = 4000 * time.Millisecond
 
-	gRPCAddr           = "localhost:10086"
-	traceLogEnabled    = false
-	logEnabled         = true
+	gRPCAddr        = "localhost:10086"
+	traceLogEnabled = false
+	logEnabled      = true
 )
 
 type frontClientArgs struct {
 	nodeID     *ntor.NodeID
 	publicKey  *ntor.PublicKey
 	sessionKey *ntor.Keypair
-	wMin       float32     // in seconds
-	wMax       float32     // in seconds
+	wMin       float32 // in seconds
+	wMax       float32 // in seconds
 	nServer    int
 	nClient    int
 }
@@ -120,7 +118,6 @@ func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFa
 		return nil, err
 	}
 
-
 	// Store the arguments that should appear in our descriptor for the clients.
 	ptArgs := pt.Args{}
 	ptArgs.Add(certArg, st.cert.String())
@@ -128,7 +125,6 @@ func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFa
 	ptArgs.Add(wMaxArg, strconv.FormatFloat(float64(st.wMax), 'f', -1, 32))
 	ptArgs.Add(nServerArg, strconv.Itoa(st.nServer))
 	ptArgs.Add(nClientArg, strconv.Itoa(st.nClient))
-
 
 	// Initialize the replay filter.
 	filter, err := replayfilter.New(replayTTL)
@@ -189,7 +185,6 @@ func (cf *frontClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 		}
 	}
 
-
 	nClientStr, nClientOk := args.Get(nClientArg)
 	if !nClientOk {
 		return nil, fmt.Errorf("missing argument '%s'", nClientArg)
@@ -232,7 +227,7 @@ func (cf *frontClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 		return nil, err
 	}
 
-	return &frontClientArgs{nodeID, publicKey, sessionKey, float32(wMin), float32(wMax),nServer, nClient}, nil
+	return &frontClientArgs{nodeID, publicKey, sessionKey, float32(wMin), float32(wMax), nServer, nClient}, nil
 }
 
 func (cf *frontClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
@@ -257,17 +252,17 @@ type frontServerFactory struct {
 	transport base.Transport
 	args      *pt.Args
 
-	nodeID       *ntor.NodeID
-	identityKey  *ntor.Keypair
-	lenSeed      *drbg.Seed
+	nodeID      *ntor.NodeID
+	identityKey *ntor.Keypair
+	lenSeed     *drbg.Seed
 
-	wMin       float32     // in seconds
-	wMax       float32     // in seconds
-	nServer    int
-	nClient    int
-	
+	wMin    float32 // in seconds
+	wMax    float32 // in seconds
+	nServer int
+	nClient int
+
 	replayFilter *replayfilter.ReplayFilter
-	closeDelay int
+	closeDelay   int
 }
 
 func (sf *frontServerFactory) Transport() base.Transport {
@@ -297,7 +292,7 @@ func (sf *frontServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	lenDist := probdist.New(sf.lenSeed, 0, framing.MaximumSegmentLength, false)
 	logger := &traceLogger{gRPCServer: grpc.NewServer(), logOn: nil, logPath: nil}
 	// The server's initial state is intentionally set to stateStart at the very beginning to obfuscate the RTT between client and server
-	c := &frontConn{conn, true, lenDist,  sf.wMin, sf.wMax, sf.nServer, sf.nClient,logger, stateStop, paddingChan, nil, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
+	c := &frontConn{conn, true, lenDist, sf.wMin, sf.wMax, sf.nServer, sf.nClient, 0, 0, logger, stateStop, paddingChan, nil, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
 	log.Debugf("Server pt con status: isServer: %v, w-min: %.1f, w-max: %.1f, n-server: %d, n-client: %d", c.isServer, c.wMin, c.wMax, c.nServer, c.nClient)
 	startTime := time.Now()
 
@@ -313,19 +308,22 @@ func (sf *frontServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 type frontConn struct {
 	net.Conn
 
-	isServer  bool
+	isServer bool
 
-	lenDist   *probdist.WeightedDist
-	wMin       float32     // in seconds
-	wMax       float32     // in seconds
-	nServer    int
-	nClient    int
+	lenDist *probdist.WeightedDist
+	wMin    float32 // in seconds
+	wMax    float32 // in seconds
+	nServer int
+	nClient int
+
+	nRealSegSent uint32 // real packet counter over tWindow second
+	nRealSegRcv  uint32
 
 	logger *traceLogger
 
-	state     uint32
+	state uint32
 
-	paddingChan          chan bool   // true when start defense, false when stop defense
+	paddingChan          chan bool // true when start defense, false when stop defense
 	loggerChan           chan []int64
 	receiveBuffer        *bytes.Buffer
 	receiveDecodedBuffer *bytes.Buffer
@@ -334,7 +332,6 @@ type frontConn struct {
 	encoder *framing.Encoder
 	decoder *framing.Decoder
 }
-
 
 func newfrontClientConn(conn net.Conn, args *frontClientArgs) (c *frontConn, err error) {
 	// Generate the initial protocol polymorphism distribution(s).
@@ -353,14 +350,14 @@ func newfrontClientConn(conn net.Conn, args *frontClientArgs) (c *frontConn, err
 
 	logPath := atomic.Value{}
 	logPath.Store("")
-	logOn  := atomic.Value{}
+	logOn := atomic.Value{}
 	logOn.Store(false)
 	server := grpc.NewServer()
 	logger := &traceLogger{gRPCServer: server, logOn: &logOn, logPath: &logPath}
 
-	pb.RegisterTraceLoggingServer(logger.gRPCServer, &traceLoggingServer{callBack:logger.UpdateLogInfo})
+	pb.RegisterTraceLoggingServer(logger.gRPCServer, &traceLoggingServer{callBack: logger.UpdateLogInfo})
 	// Allocate the client structure.
-	c = &frontConn{conn, false, lenDist, args.wMin, args.wMax, args.nServer, args.nClient, logger, stateStop, paddingChan, loggerChan, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
+	c = &frontConn{conn, false, lenDist, args.wMin, args.wMax, args.nServer, args.nClient, 0, 0, logger, stateStop, paddingChan, loggerChan, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
 
 	log.Debugf("Client pt con status: isServer: %v, w-min: %.2f, w-max: %.2f, n-server: %d, n-client: %d", c.isServer, c.wMin, c.wMax, c.nServer, c.nClient)
 	// Start the handshake timeout.
@@ -526,8 +523,7 @@ func (conn *frontConn) Read(b []byte) (n int, err error) {
 	return
 }
 
-
-func (conn *frontConn) initFrontArgs(N int, tsQueue *queue.FixedFIFO, frontInitTime *atomic.Value) (err error){
+func (conn *frontConn) initFrontArgs(N int, tsQueue *queue.FixedFIFO, frontInitTime *atomic.Value) (err error) {
 	wSampler := distuv.Uniform{Min: float64(conn.wMin), Max: float64(conn.wMax),
 		Src: expRand.NewSource(uint64(time.Now().UTC().UnixNano()))}
 	n_sampler := distuv.Uniform{Min: 1.0, Max: float64(N),
@@ -538,7 +534,7 @@ func (conn *frontConn) initFrontArgs(N int, tsQueue *queue.FixedFIFO, frontInitT
 	tSampler := distuv.Weibull{K: 2, Lambda: math.Sqrt2 * w_tmp,
 		Src: expRand.NewSource(uint64(time.Now().UTC().UnixNano()))}
 	ts := make([]float64, n_tmp)
-	for i := 0; i  < n_tmp; i++ {
+	for i := 0; i < n_tmp; i++ {
 		ts[i] = tSampler.Rand()
 	}
 	sort.Float64s(ts)
@@ -548,7 +544,7 @@ func (conn *frontConn) initFrontArgs(N int, tsQueue *queue.FixedFIFO, frontInitT
 	}
 
 	frontInitTime.Store(time.Now())
-	for i:= 0; i< n_tmp; i++ {
+	for i := 0; i < n_tmp; i++ {
 		err := tsQueue.Enqueue(time.Duration(int64(ts[i] * 1e9)))
 		if err != nil {
 			return err
@@ -562,10 +558,9 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 	closeChan := make(chan int)
 	defer close(closeChan)
 
-	errChan := make(chan error, 5)  // errors from all the go routines will be sent to this channel
+	errChan := make(chan error, 5)           // errors from all the go routines will be sent to this channel
 	sendChan := make(chan PacketInfo, 65535) // all packed packets are sent through this channel
 
-	var realNSeg uint32 = 0  // real packet counter over 1 second
 	var receiveBuf utils.SafeBuffer //read payload from upstream and buffer here
 	var frontInitTime atomic.Value
 	var tsQueue *queue.FixedFIFO // maintain a queue of timestamps sampled
@@ -602,13 +597,13 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 			log.Infof("[Routine] Client traceLogger turns on.")
 			for {
 				select {
-				case _, ok := <- closeChan:
+				case _, ok := <-closeChan:
 					if !ok {
 						conn.logger.gRPCServer.Stop()
 						log.Infof("[Routine] traceLogger exits by closeChan signal.")
 						return
 					}
-				case pktinfo, ok := <- conn.loggerChan:
+				case pktinfo, ok := <-conn.loggerChan:
 					if !ok {
 						log.Debugf("[Routine] traceLogger exits: %v.")
 						return
@@ -622,16 +617,16 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 	//create a go routine to send out packets to the wire
 	go func() {
 		for {
-			select{
-			case _, ok := <- closeChan:
-				if !ok{
+			select {
+			case _, ok := <-closeChan:
+				if !ok {
 					log.Infof("[Routine] Send routine exits by closedChan.")
 					return
 				}
-			case packetInfo := <- sendChan:
+			case packetInfo := <-sendChan:
 				pktType := packetInfo.pktType
-				data    := packetInfo.data
-				padLen  := packetInfo.padLen
+				data := packetInfo.data
+				padLen := packetInfo.padLen
 				var frameBuf bytes.Buffer
 				err = conn.makePacket(&frameBuf, pktType, data, padLen)
 				if err != nil {
@@ -660,14 +655,14 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 	//true: need to init front params
 	//false: need to cancel unsent dummy packets
 	go func() {
-		for{
-			select{
-			case _, ok := <- closeChan:
-				if !ok{
+		for {
+			select {
+			case _, ok := <-closeChan:
+				if !ok {
 					log.Infof("[Routine] padding factory exits by closedChan.")
 					return
 				}
-			case startPadding := <- conn.paddingChan:
+			case startPadding := <-conn.paddingChan:
 				if startPadding {
 					err := conn.initFrontArgs(maxPaddingN, tsQueue, &frontInitTime)
 					if err != nil {
@@ -687,7 +682,7 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 	}()
 
 	go func() {
-		for{
+		for {
 			select {
 			case _, ok := <-closeChan:
 				if !ok {
@@ -712,8 +707,8 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 					return
 				}
 				cancel()
-				utils.SleepRho(frontInitTime.Load().(time.Time) ,timestamp.(time.Duration))
-				sendChan <- PacketInfo{pktType: packetTypeDummy, data: []byte{},  padLen: maxPacketPaddingLength}
+				utils.SleepRho(frontInitTime.Load().(time.Time), timestamp.(time.Duration))
+				sendChan <- PacketInfo{pktType: packetTypeDummy, data: []byte{}, padLen: maxPacketPaddingLength}
 			}
 		}
 	}()
@@ -721,42 +716,43 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 	// this go routine regularly check the real throughput
 	// if it is small, change to stop state
 	go func() {
-		ticker := time.NewTicker(time.Second)
+		ticker := time.NewTicker(tWindow)
 		defer ticker.Stop()
-		for{
-			select{
-			case _, ok := <- closeChan:
+		for {
+			select {
+			case _, ok := <-closeChan:
 				if !ok {
 					log.Infof("[Routine] Ticker routine exits by closeChan.")
 					return
 				}
-			case <- ticker.C:
-				//log.Debugf("NRealSeg %v at %v", realNSeg, time.Now().Format("15:04:05.000000"))
-				if !conn.isServer && atomic.LoadUint32(&conn.state) != stateStop && atomic.LoadUint32(&realNSeg) < 2 {
+			case <-ticker.C:
+				log.Debugf("[State] Real Sent: %v, Real Receive: %v, curState: %s at %v.", conn.nRealSegSent, conn.nRealSegRcv, stateMap[atomic.LoadUint32(&conn.state)], time.Now().Format("15:04:05.000000"))
+				if !conn.isServer && atomic.LoadUint32(&conn.state) != stateStop && (atomic.LoadUint32(&conn.nRealSegSent) < 2 || atomic.LoadUint32(&conn.nRealSegRcv) < 2) {
 					log.Infof("[State] %s -> %s.", stateMap[atomic.LoadUint32(&conn.state)], stateMap[stateStop])
 					atomic.StoreUint32(&conn.state, stateStop)
 					sendChan <- PacketInfo{pktType: packetTypeSignalStop, data: []byte{}, padLen: maxPacketPaddingLength}
 					conn.paddingChan <- false
 				}
-				atomic.StoreUint32(&realNSeg, 0) //reset counter
+				atomic.StoreUint32(&conn.nRealSegSent, 0) //reset counter
+				atomic.StoreUint32(&conn.nRealSegRcv, 0)  //reset counter
 			}
 		}
 	}()
 
 	for {
 		select {
-		case conErr := <- errChan:
+		case conErr := <-errChan:
 			log.Infof("downstream copy loop terminated at %v. Reason: %v", time.Now().Format("15:04:05.000000"), conErr)
 			return written, conErr
 		default:
 			buf := make([]byte, 65535)
 			rdLen, err := r.Read(buf[:])
-			if err!= nil {
+			if err != nil {
 				log.Errorf("Exit by read err:%v", err)
 				return written, err
 			}
 			if rdLen > 0 {
-				receiveBuf.Write(buf[: rdLen])
+				receiveBuf.Write(buf[:rdLen])
 			} else {
 				log.Errorf("BUG? read 0 bytes, err: %v", err)
 				return written, io.EOF
@@ -784,13 +780,12 @@ func (conn *frontConn) ReadFrom(r io.Reader) (written int64, err error) {
 					log.Infof("Exit by read buffer err:%v", rdErr)
 					return written, rdErr
 				}
-				sendChan <- PacketInfo{pktType: packetTypePayload, data: payload[:rdLen], padLen: uint16(maxPacketPaddingLength-rdLen)}
-				atomic.AddUint32(&realNSeg, 1)
+				sendChan <- PacketInfo{pktType: packetTypePayload, data: payload[:rdLen], padLen: uint16(maxPacketPaddingLength - rdLen)}
+				atomic.AddUint32(&conn.nRealSegSent, 1)
 			}
 		}
 	}
 }
-
 
 func (conn *frontConn) SetDeadline(t time.Time) error {
 	return syscall.ENOTSUP
@@ -818,8 +813,6 @@ func (conn *frontConn) closeAfterDelay(sf *frontServerFactory, startTime time.Ti
 	// passes.
 	_, _ = io.Copy(ioutil.Discard, conn.Conn)
 }
-
-
 
 var _ base.ClientFactory = (*frontClientFactory)(nil)
 var _ base.ServerFactory = (*frontServerFactory)(nil)

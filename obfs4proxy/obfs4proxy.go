@@ -312,7 +312,7 @@ func main() {
 	// Handle the command line arguments.
 	_, execName := path.Split(os.Args[0])
 	showVer := flag.Bool("version", false, "Print version and exit")
-	logLevelStr := flag.String("logLevel", "INFO", "Log level (ERROR/WARN/INFO/DEBUG)")
+	logLevelStr := flag.String("logLevel", "DEBUG", "Log level (ERROR/WARN/INFO/DEBUG)")
 	enableLogging := flag.Bool("enableLogging", true, "Log to TOR_PT_STATE_LOCATION/"+obfs4proxyLogFile)
 	unsafeLogging := flag.Bool("unsafeLogging", false, "Disable the address scrubber")
 	flag.Parse()

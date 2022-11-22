@@ -169,6 +169,9 @@ func (conn *frontConn) readPackets() (err error) {
 		case packetTypePayload:
 			if payloadLen > 0 {
 				conn.receiveDecodedBuffer.Write(payload)
+				if !conn.isServer {
+					atomic.AddUint32(&conn.nRealSegRcv, 1)
+				}
 			}
 		case packetTypePrngSeed:
 			// Only regenerate the distribution if we are the client.
