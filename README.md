@@ -1,7 +1,7 @@
 # WFDefProxy
 
 ## What?
-WFDefProxy implements three defenses against Website Fingerprinting (WF) attack: FRONT [1], Tamaraw [2] and Random-WT [3]. 
+WFDefProxy implements five defenses against Website Fingerprinting (WF) attack: FRONT [1], Tamaraw [2], Random-WT [3], RegulaTor [5], and Surakav [6]. 
 It extends obfs4proxy [4], the state-of-the-art pluggable transport for Tor to circumvent censorship. 
 It transforms the traffic between the client and the bridge according to a defense's protocol.
 It makes use of the cryptographic system of obfs4 to do the handshake as well as to encrypt/decrypt the packets.
@@ -249,6 +249,10 @@ the same dependency versions, while `go get -d` always downloads master.
 [3] [Wang, Tao, and Ian Goldberg. "Walkie-Talkie: An Efficient Defense Against Passive Website Fingerprinting Attacks." 26th USENIX Security Symposium. 2017.](https://www.usenix.org/system/files/conference/usenixsecurity17/sec17-wang-tao.pdf)
 
 [4] [Yawning, Angel. "obfs4 - The obfourscator"](https://github.com/Yawning/obfs4)
+
+[5] [James K Holland, and Nicholas Hopper. "RegulaTor: A Straightforward Website Fingerprinting Defense." Proceedings on Privacy Enhancing Technologies, 2022.](https://petsymposium.org/popets/2022/popets-2022-0049.pdf)
+
+[6] [Jiajun GONG, Wuqi Zhang, Charles Zhang, and Tao Wang. "Surakav: Generating Realistic Traces for a Strong Website Fingerprinting Defense." IEEE Symposium on Security and Privacy, 2022.](https://www.computer.org/csdl/proceedings-article/sp/2022/131600b525/1FlQzEQkO7C)
 
 ## Disclaimer
 This repository is only intended for research purpose. 
