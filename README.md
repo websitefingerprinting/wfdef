@@ -15,6 +15,7 @@ The workflow of WFDefProxy is shown in the figure below:
     * [To build:](#to-build-)
     * [To run **FRONT**](#to-run---front--)
     * [To run **Tamaraw**](#to-run---tamaraw--)
+    * [To run **RegulaTor**](#to-run---regulator--)
     * [To run **Random-WT**](#to-run---random-wt--)
 - [How does WFDefProxy work?](#how-does-wfdefproxy-work-)
     * [Overview](#overview)
@@ -89,7 +90,23 @@ Also, on the client side, the last two lines of the torrc file should be
 Bridge front 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ rho-client=12 rho-server=4 nseg=200
 ClientTransportPlugin front exec /Users/example/wfdef/obfs4proxy/obfs4proxy
 ```
-Replace `Bridge` with the information in `tamaraw_bridgeline.txt` in `/Users/example/tor-config/log-front-server/pt_state`.
+Replace `Bridge` with the information in `tamaraw_bridgeline.txt` in `/Users/example/tor-config/log-tamaraw-server/pt_state`.
+
+</span>
+
+<span id="to-run---regulator--">
+
+### To run RegulaTor
+The last two lines of torrc file for bridge:
+```
+ServerTransportPlugin regulator exec /Users/example/wfdef/obfs4proxy/obfs4proxy
+ServerTransportOptions regulator r=277 d=.94 t=3.55 n=3550 u=3.95 c=1.77
+```
+Similarly, the client side
+```
+Bridge regulator 127.0.0.1:35000 cert=So0EMyNeSi8XR4BEZnHyuw5dqTaXtXg4lgW2gLBoDpSJHjKd7ZGga6UK6ilSbEcw71CRLw r=277 d=0.94 t=3.55 n=3550 u=3.95 c=1.77
+ClientTransportPlugin regulator exec /Users/example/wfdef/obfs4proxy/obfs4proxy
+```
 
 </span>
 
@@ -121,6 +138,7 @@ We nearly keep the framework of obfs4proxy unchanged, except that we add four di
 * **null**: do nothing but forward the packets between client and the bridge, can be used for collecting undefended datasets
 * **front**: implement FRONT defense
 * **tamaraw**: implement tamaraw defense
+* **regulator**: implement regulator defense
 * **random-wt**: implement random-wt defense
 
 The key modules for each transport:
@@ -136,9 +154,10 @@ The key modules for each transport:
 ### Finite State Machine
 Below are the state machines for three defenses on the client side (1.FRONT 2.Tamaraw 3.Random-WT).
 <div  align="center"> 
-<img src="./imgs/front-fsm.png" style="zoom:33%;" />
-<img src="./imgs/tamaraw-fsm.png" style="zoom:33%;" />
-<img src="./imgs/randomwt-fsm.png" style="zoom:33%;" />
+<img src="./imgs/front-fsm.png" style="zoom:33%;" width="300" height="220"/>
+<img src="./imgs/tamaraw-fsm.png" style="zoom:33%;" width="300" height="220"/>
+<img src="./imgs/regulator-fsm.png" style="zoom:33%;" width="300" height="220" />
+<img src="./imgs/randomwt-fsm.png" style="zoom:33%;" width="300" height="220"/>
 </div>
 
 The start and end of a defense is controlled by a finite state machine, where a event will trigger some actions and state transition.
@@ -185,7 +204,7 @@ If you want to implement a new defense on WFDefProxy, there are two main steps t
 <span id="tips-and-tricks">
 
 ## Tips and tricks
-* There are two ways to get the trace via WFDefProxy: 
+* There are two ways to get the trace via WFDefProxy (**The second is deprecated as it is not reliable and add complexity to the defense code**): 
   * The first one is to simply add some logs about the time and bytes of the packets sent or received near the `conn.Write` or `Read` function. I have written some. 
    The logs can be found at `/Users/example/tor-config/log-[defense]-client/pt_state/obfs4proxy.log`.
    Make sure the log function is enabled. 
@@ -214,11 +233,11 @@ If you want to implement a new defense on WFDefProxy, there are two main steps t
 
 Build time library dependencies are handled by the Go module automatically.
 
-If you are on Go versions earlier than 1.11, you might need to run `go get -d
+If you are on Go versions earlier than 1.16, you might need to run `go get -d
 ./...` to download all the dependencies. Note however, that modules always use
 the same dependency versions, while `go get -d` always downloads master.
 
-* Go 1.11.0 or later. Patches to support up to 2 prior major releases will
+* Go 1.16.0 or later. Patches to support up to 2 prior major releases will
   be accepted if they are not overly intrusive and well written.
 * See `go.mod`, `go.sum` and `go list -m -u all` for build time dependencies.
 
