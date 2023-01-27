@@ -152,7 +152,7 @@ The key modules for each transport:
 <span id="finite-state-machine">
 
 ### Finite State Machine
-Below are the state machines for three defenses on the client side (1.FRONT 2.Tamaraw 3.Random-WT).
+Below are the state machines for three defenses on the client side (1.FRONT 2.Tamaraw 3.RegulaTor 4.Random-WT).
 <div  align="center"> 
 <img src="./imgs/front-fsm.png" style="zoom:33%;" width="300" height="220"/>
 <img src="./imgs/tamaraw-fsm.png" style="zoom:33%;" width="300" height="220"/>
