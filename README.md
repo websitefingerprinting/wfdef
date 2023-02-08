@@ -242,13 +242,13 @@ the same dependency versions, while `go get -d` always downloads master.
 * See `go.mod`, `go.sum` and `go list -m -u all` for build time dependencies.
 
 ## References
-[1] [Gong, Jiajun, and Tao Wang. "Zero-delay Lightweight Defenses against Website Fingerprinting." 29th USENIX Security Symposium. 2020.](https://www.usenix.org/system/files/sec20-gong.pdf)
+[1] [Jiajun GONG, and Tao Wang. "Zero-delay Lightweight Defenses against Website Fingerprinting." 29th USENIX Security Symposium. 2020.](https://www.usenix.org/system/files/sec20-gong.pdf)
 
-[2] [Cai, Xiang, et al. "A Systematic Approach to Developing and Evaluating Website Fingerprinting Defenses." Proceedings of the 2014 ACM SIGSAC Conference on Computer and Communications Security. 2014.](https://dl.acm.org/doi/pdf/10.1145/2660267.2660362)
+[2] [Xiang Cai et al. "A Systematic Approach to Developing and Evaluating Website Fingerprinting Defenses." Proceedings of the 2014 ACM SIGSAC Conference on Computer and Communications Security. 2014.](https://dl.acm.org/doi/pdf/10.1145/2660267.2660362)
 
-[3] [Wang, Tao, and Ian Goldberg. "Walkie-Talkie: An Efficient Defense Against Passive Website Fingerprinting Attacks." 26th USENIX Security Symposium. 2017.](https://www.usenix.org/system/files/conference/usenixsecurity17/sec17-wang-tao.pdf)
+[3] [Tao Wang, and Ian Goldberg. "Walkie-Talkie: An Efficient Defense Against Passive Website Fingerprinting Attacks." 26th USENIX Security Symposium. 2017.](https://www.usenix.org/system/files/conference/usenixsecurity17/sec17-wang-tao.pdf)
 
-[4] [Yawning, Angel. "obfs4 - The obfourscator"](https://github.com/Yawning/obfs4)
+[4] [Yawning Angel. "obfs4 - The obfourscator"](https://github.com/Yawning/obfs4)
 
 [5] [James K Holland, and Nicholas Hopper. "RegulaTor: A Straightforward Website Fingerprinting Defense." Proceedings on Privacy Enhancing Technologies, 2022.](https://petsymposium.org/popets/2022/popets-2022-0049.pdf)
 
