@@ -10,9 +10,9 @@ require (
 	github.com/mikioh/tcpopt v0.0.0-20190314235656-172688c1accc // indirect
 	github.com/stretchr/testify v1.7.0 // indirect
 	gitlab.com/yawning/utls.git v0.0.11-1
-	golang.org/x/crypto v0.0.0-20190325154230-a5d413f7728c
+	golang.org/x/crypto v0.1.0
 	golang.org/x/exp v0.0.0-20190125153040-c74c464bbbf2
-	golang.org/x/net v0.0.0-20190328230028-74de082e2cca
+	golang.org/x/net v0.7.0
 	gonum.org/v1/gonum v0.8.2
 	google.golang.org/grpc v1.33.2
 	google.golang.org/protobuf v1.27.1
