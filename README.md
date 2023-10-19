@@ -145,7 +145,7 @@ Also, on the client side, the last two lines of the torrc file should be
 Bridge tamaraw 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ rho-client=12 rho-server=4 nseg=200
 ClientTransportPlugin tamaraw exec /Users/example/wfdef/obfs4proxy/obfs4proxy
 ```
-Replace `Bridge` with the information in `tamaraw_bridgeline.txt` in `/Users/example/tor-config/log-front-server/pt_state`.
+Replace `Bridge` with the information in `tamaraw_bridgeline.txt` in `/Users/example/tor-config/log-tamaraw-server/pt_state`.
 
 </span>
 
@@ -201,7 +201,7 @@ See the original paper for the design details of WFDefProxy [5].
     When received a message with `turnOn=true`, WFDefProxy will log the packet information (timestamp, direction and size) to `filePath`.
     When received a message with `turnOn=false`, WFDefProxy will stop logging.
 
-[comment]: <> (* WFDefProxy can be used together with [WFCrawler]&#40;https://github.com/anonymous/WFCrawler&#41;, the toolkit we developed for crawling and parsing traces.)
+* WFDefProxy can be used together with [WFCrawler](https://github.com/websitefingerprinting/WFCrawler), the toolkit we developed for crawling and parsing traces.
 
 </span>
 
