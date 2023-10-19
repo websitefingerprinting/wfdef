@@ -13,6 +13,7 @@ The workflow of WFDefProxy is shown in the figure below:
 ## Table of Contents
 - [How to use?](#how-to-use-)
     * [To build:](#to-build-)
+    * [To run **Surakav**](#to-run---Surakav--) 
     * [To run **FRONT**](#to-run---front--)
     * [To run **Tamaraw**](#to-run---tamaraw--)
     * [To run **RegulaTor**](#to-run---regulator--)
@@ -37,6 +38,49 @@ The workflow of WFDefProxy is shown in the figure below:
 Suppose we put the compiled binary at `/Users/example/wfdef/obfs4proxy/obfs4proxy`.
 
 </span>
+
+<span id="to-run---Surakav--">
+
+### To run Surakav
+The torrc configuration of bridge is like:
+```
+# Feel free to adapt the path.
+DataDirectory /Users/example/tor-config/log-wfgan-server  
+Log notice stdout    
+SOCKSPort 9052    
+AssumeReachable 1    
+PublishServerDescriptor 0    
+Exitpolicy reject *:*    
+ORPort auto   
+ExtORPort auto
+Nickname "wfdef"    
+BridgeRelay 1    
+ServerTransportListenAddr wfgan 0.0.0.0:34000
+ServerTransportPlugin wfgan exec /Users/example/wfdef/obfs4proxy/obfs4proxy
+ServerTransportOptions wfgan tol=0.4
+```
+It will generate a `wfgan_bridgeline.txt` in `/Users/example/tor-config/log-wfgan-server/pt_state`,
+containing a certification used for handshake as well as the configured parameters.
+
+The client's torrc file is like:
+```
+DataDirectory /Users/example/tor-config/log-wfgan-client 
+Log notice stdout    
+SOCKSPort 9050  
+ControlPort 9051  
+UseBridges 1    
+Bridge front 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ tol=0.4
+ClientTransportPlugin wfgan exec /Users/example/wfdef/obfs4proxy/obfs4proxy
+```
+
+You can launch Tor with command line `tor -f client-torrc` or replace Tor Browser's torrc file with it and launch the Tor Browser directly.
+Note that if is better to also include the relay's fingerprint in `Bridge` option due to some bugs of Tor Browser that may cause the launch failure.
+
+
+
+
+</span>
+
 
 <span id="to-run---front--">
 
