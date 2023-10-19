@@ -69,7 +69,7 @@ Log notice stdout
 SOCKSPort 9050  
 ControlPort 9051  
 UseBridges 1    
-Bridge front 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ tol=0.4
+Bridge wfgan 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ tol=0.4
 ClientTransportPlugin wfgan exec /Users/example/wfdef/obfs4proxy/obfs4proxy
 ```
 
@@ -131,8 +131,8 @@ ServerTransportOptions tamaraw rho-client=12 rho-server=4 nseg=200
 ```
 Also, on the client side, the last two lines of the torrc file should be
 ```
-Bridge front 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ rho-client=12 rho-server=4 nseg=200
-ClientTransportPlugin front exec /Users/example/wfdef/obfs4proxy/obfs4proxy
+Bridge tamaraw 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ rho-client=12 rho-server=4 nseg=200
+ClientTransportPlugin tamaraw exec /Users/example/wfdef/obfs4proxy/obfs4proxy
 ```
 Replace `Bridge` with the information in `tamaraw_bridgeline.txt` in `/Users/example/tor-config/log-tamaraw-server/pt_state`.
 
