@@ -178,8 +178,9 @@ ClientTransportPlugin randomwt exec /Users/example/wfdef/obfs4proxy/obfs4proxy
 <span id="overview">
 
 ### Overview
-We nearly keep the framework of obfs4proxy unchanged, except that we add four different transports in `./transports`:
+We nearly keep the framework of obfs4proxy unchanged, except that we add five different transports in `./transports`:
 * **null**: do nothing but forward the packets between client and the bridge, can be used for collecting undefended datasets
+* **regulator**: implement Surakav defense
 * **front**: implement FRONT defense
 * **tamaraw**: implement tamaraw defense
 * **regulator**: implement regulator defense
