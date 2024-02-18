@@ -57,7 +57,7 @@ Nickname "wfdef"
 BridgeRelay 1    
 ServerTransportListenAddr wfgan 0.0.0.0:34000
 ServerTransportPlugin wfgan exec /Users/example/wfdef/obfs4proxy/obfs4proxy
-ServerTransportOptions wfgan tol=0.4
+ServerTransportOptions wfgan tol=0.4 p=0.5
 ```
 It will generate a `wfgan_bridgeline.txt` in `/Users/example/tor-config/log-wfgan-server/pt_state`,
 containing a certification used for handshake as well as the configured parameters.
@@ -69,7 +69,7 @@ Log notice stdout
 SOCKSPort 9050  
 ControlPort 9051  
 UseBridges 1    
-Bridge wfgan 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ tol=0.4
+Bridge wfgan 127.0.0.1:34000 cert=VdXiHCbwjXAC3+M2VZwasp+TAIbK0TuQD3MG3s024pE3brEygUOovIJo4f2oxZpBvlrNFQ tol=0.4 p=0.5
 ClientTransportPlugin wfgan exec /Users/example/wfdef/obfs4proxy/obfs4proxy
 ```
 
