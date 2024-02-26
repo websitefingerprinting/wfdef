@@ -68,7 +68,7 @@ const (
 	maxCloseDelay = 60
 	TWindow       = 4000 * time.Millisecond
 
-	LogEnabled = false
+	LogEnabled = true
 )
 
 type ClientArgs interface {
